@@ -1,21 +1,28 @@
+use core::option::Option::Some;
+use std::collections::HashMap;
+
 use wgpu::{Device, Queue};
 
-use crate::{definitions::Vertex, user_interface::{elements::Element, UserInterface}};
+use crate::{definitions::{GeometryType, Instance, InstanceRaw, Vertex}, user_interface::{elements::Element, UserInterface}};
 
 pub struct Interface {
     elements: Vec<Box<dyn Element>>,
+    instances: HashMap<GeometryType, Vec<InstanceRaw>>,
     max_index: u32,
-    vertex_buffer: Option<wgpu::Buffer>,
-    index_buffer: Option<wgpu::Buffer>,
+    vertex_buffers: HashMap<GeometryType, wgpu::Buffer>,
+    index_buffers: HashMap<GeometryType, wgpu::Buffer>,
+    instance_buffers: HashMap<GeometryType, wgpu::Buffer>,
 }
 
 impl Interface {
     pub fn new() -> Self {
         Self {
             elements: Vec::new(),
+            instances: HashMap::new(),
             max_index: 0,
-            vertex_buffer: None,
-            index_buffer: None,
+            vertex_buffers: HashMap::new(),
+            index_buffers: HashMap::new(),
+            instance_buffers: HashMap::new(),
         }
     }
 
@@ -24,80 +31,111 @@ impl Interface {
         elements_builder(&mut user_interface)
     }
 
-    pub fn add_elements(&mut self, mut element: impl Element + 'static) {
-        element.identify_as(self.max_index);
+    pub fn add_elements(&mut self, element: impl Element + 'static) {
         self.elements.push(Box::new(element));
         self.max_index += 1;
     }
 
-    pub fn initialize_interface_buffers(&mut self, device: &Device, queue: &Queue) {
-        let mut total_vertices = 0;
-        let mut total_indices = 0;
-        for element in &self.elements {
-            let (vertices, indices) = element.draw();
-            total_vertices += vertices.len();
-            total_indices += indices.len();
+    pub fn geometry_vertices(geometry_type: &GeometryType) -> (Vec<Vertex>, Vec<u16>) {
+        match geometry_type {
+            GeometryType::Quad => {
+            let indices = [0, 1, 2, 2, 3, 0].to_vec();
+            let vertices = [
+                Vertex {
+                    position: [-1.0, -1.0], // Bottom-left corner of a 200x200 area
+                    color: [1.0, 0.0, 0.0, 1.0],
+                },
+                Vertex {
+                    position: [1.0, -1.0], // Bottom-right corner
+                    color: [1.0, 0.0, 0.0, 1.0],
+                },
+                Vertex {
+                    position: [1.0, 1.0],   // Top-middle corner
+                    color: [1.0, 0.0, 0.0, 1.0],
+                },
+                Vertex {
+                    position: [-1.0, 1.0],
+                    color: [1.0, 0.0, 0.0, 1.0],
+                }
+            ].to_vec();
+            (vertices, indices)
+            },
         }
-        let vertex_buffer_size = (total_vertices * std::mem::size_of::<Vertex>()) as wgpu::BufferAddress;
-        let index_buffer_size = (total_indices * std::mem::size_of::<u16>()) as wgpu::BufferAddress;
-        self.vertex_buffer = Some(device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("Vertex Buffer"),
-            size: vertex_buffer_size,
-            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false
-        }));
-        self.index_buffer = Some(device.create_buffer(&wgpu::BufferDescriptor {
-            label: Some("Index Buffer"),
-            size: index_buffer_size,
-            usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false
-        }));
+    }
 
+    pub fn initialize_interface_buffers(&mut self, device: &Device, queue: &Queue) {
+        let mut batched_instances: HashMap<GeometryType, Vec<InstanceRaw>> = HashMap::new();
+
+        for element in &self.elements {
+            let instance = Instance::new(element.get_geometry_type(), element.get_position(), element.get_color(), element.get_scale());
+            let raw_instances = instance.to_raw();
+            batched_instances
+                .entry(element.get_geometry_type())
+                .or_insert(Vec::new())
+                .push(raw_instances);
+        }
+
+        for (geometry_type, instances) in batched_instances.iter() {
+            let (vertices, indices) = Self::geometry_vertices(geometry_type);
+
+            let vertex_buffer_size = (vertices.len() * std::mem::size_of::<Vertex>()) as wgpu::BufferAddress;
+            let index_buffer_size = (indices.len() * std::mem::size_of::<u16>()) as wgpu::BufferAddress;
+            let instance_buffer_size = (instances.len() * std::mem::size_of::<InstanceRaw>()) as wgpu::BufferAddress;
+
+            self.vertex_buffers.insert(*geometry_type, device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("Vertex Buffer"),
+                size: vertex_buffer_size,
+                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false
+            }));
+
+            self.index_buffers.insert(*geometry_type, device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("Index Buffer"),
+                size: index_buffer_size,
+                usage: wgpu::BufferUsages::INDEX | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false
+            }));
+
+            self.instance_buffers.insert(*geometry_type, device.create_buffer(&wgpu::BufferDescriptor {
+                label: Some("Instance Buffer"),
+                size: instance_buffer_size,
+                usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false
+            }));
+        }
+
+        self.instances = batched_instances;
         self.update_vertices(queue);
     }
 
     pub fn update_vertices(&mut self, queue: &Queue) {
-        let mut all_vertices: Vec<Vertex> = Vec::new();
-        let mut all_indices: Vec<u16> = Vec::new();
+        for (geometry_type, instances) in self.instances.iter() {
+            let (vertices, indices) = Self::geometry_vertices(geometry_type);
 
-        for element in &self.elements {
-            let (vertices, indices) = element.draw();
-            let start_index = all_vertices.len() as u32;
-
-            all_vertices.extend_from_slice(&vertices);
-            all_indices.extend(indices.iter().map(|i| *i + start_index as u16));
+            if let Some(vertex_buffer) = self.vertex_buffers.get(geometry_type) {
+                queue.write_buffer(vertex_buffer, 0, bytemuck::cast_slice(&vertices));
+            }
+            if let Some(index_buffer) = self.index_buffers.get(geometry_type) {
+                queue.write_buffer(index_buffer, 0, bytemuck::cast_slice(&indices));
+            }
+            if let Some(instance_buffer) = self.instance_buffers.get(geometry_type) {
+                queue.write_buffer(instance_buffer, 0, bytemuck::cast_slice(instances));
+            }
         }
-
-        queue.write_buffer(self.vertex_buffer.as_ref().unwrap(), 0, bytemuck::cast_slice(&all_vertices));
-        queue.write_buffer(self.index_buffer.as_ref().unwrap(), 0, bytemuck::cast_slice(&all_indices));
     }
 
     pub fn render(&self, render_pass: &mut wgpu::RenderPass) {
-        let vertex_buffer = match &self.vertex_buffer {
-            Some(buffer) => buffer,
-            None => {
-                eprintln!("Warning: GUI vertex buffer not initialized. Skipping Render...");
-                return;
-            }
-        };
-        let index_buffer = match &self.index_buffer {
-            Some(buffer) => buffer,
-            None => {
-                eprintln!("Warning: GUI index buffer not initialized. Skipping Render...");
-                return;
-            }
-        };
+        for (geometry_type, instances) in self.instances.iter() {
+            let vertex_buffer = self.vertex_buffers.get(geometry_type).unwrap();
+            let index_buffer = self.index_buffers.get(geometry_type).unwrap();
+            let instance_buffer = self.instance_buffers.get(geometry_type).unwrap();
+            let (_vertices, indices) = Self::geometry_vertices(geometry_type);
 
-        render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
-        render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+            render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
+            render_pass.set_vertex_buffer(1, instance_buffer.slice(..));
+            render_pass.set_index_buffer(index_buffer.slice(..), wgpu::IndexFormat::Uint16);
 
-        let mut index_offset = 0;
-        for element in &self.elements {
-            let (_vertices, indices) = element.draw();
-
-            render_pass.draw_indexed(index_offset as u32..(index_offset + indices.len()) as u32, 0, 0..1);
-            index_offset += indices.len();
+            render_pass.draw_indexed(0..indices.len() as u32, 0, 0..instances.len() as u32);
         }
-
     }
 }

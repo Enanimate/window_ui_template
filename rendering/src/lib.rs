@@ -3,7 +3,7 @@ use std::{error::Error, sync::{Arc, Mutex}};
 use wgpu::util::DeviceExt;
 use winit::{dpi::PhysicalSize, window::Window};
 
-use crate::{camera::{Camera2D, Camera2DUniform}, definitions::Vertex, pipeline::PipeLineBuilder, user_interface::interface::Interface};
+use crate::{camera::{Camera2D, Camera2DUniform}, definitions::{InstanceRaw, Vertex}, pipeline::PipeLineBuilder, user_interface::interface::Interface};
 
 mod camera;
 mod pipeline;
@@ -107,6 +107,7 @@ impl RenderState {
             .set_pixel_format(wgpu::TextureFormat::Bgra8UnormSrgb)
             .set_shader_module("rendering//shaders/ui_shader.wgsl", "vs_main", "fs_main")
             .add_vertex_buffer_layout(Vertex::description())
+            .add_vertex_buffer_layout(InstanceRaw::desc())
             .add_bind_group_layout(&camera_bind_group_layout)
             .build("Render Pipeline");
 

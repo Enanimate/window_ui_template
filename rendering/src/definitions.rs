@@ -26,6 +26,72 @@ impl Vertex {
     }
 }
 
+pub struct Instance {
+    pub geometry_type: GeometryType,
+    position: [f32; 2],
+    color: [f32; 4],
+    scale: [f32; 2],
+}
+
+impl Instance {
+    pub fn new(geometry_type: GeometryType, position: [f32; 2], color: [f32; 4], scale: [f32; 2]) -> Self {
+        Self { 
+            geometry_type: geometry_type, 
+            position,
+            color,
+            scale,
+        }
+    }
+
+    pub fn to_raw(&self) -> InstanceRaw {
+        InstanceRaw {
+            position: self.position,
+            color: self.color,
+            scale: self.scale,
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(bytemuck::Pod, bytemuck::Zeroable, Clone, Copy)]
+pub struct InstanceRaw {
+    position: [f32; 2],
+    color: [f32; 4],
+    scale: [f32; 2],
+}
+
+impl InstanceRaw {
+    pub fn desc() -> wgpu::VertexBufferLayout<'static> {
+        wgpu::VertexBufferLayout {
+            array_stride: std::mem::size_of::<InstanceRaw>() as wgpu::BufferAddress,
+            step_mode: wgpu::VertexStepMode::Instance,
+            attributes: &[
+                wgpu::VertexAttribute {
+                    shader_location: 2,
+                    offset: 0,
+                    format: wgpu::VertexFormat::Float32x2,
+                },
+                wgpu::VertexAttribute {
+                    shader_location: 3,
+                    offset: std::mem::size_of::<[f32; 2]>() as wgpu::BufferAddress,
+                    format: wgpu::VertexFormat::Float32x4,
+                },
+                wgpu::VertexAttribute {
+                    offset: std::mem::size_of::<[f32; 2]>() as wgpu::BufferAddress + std::mem::size_of::<[f32; 4]>() as wgpu::BufferAddress,
+                    shader_location: 4,
+                    format: wgpu::VertexFormat::Float32x2,
+                },
+            ],
+        }
+    }
+}
+
+#[derive(Eq, Hash, PartialEq, Clone, Copy)]
+pub enum GeometryType {
+    Quad
+}
+
+
 #[derive(Debug, Clone)]
 pub struct UiAtlas {
     pub entries: Vec<UiAtlasTexture>,

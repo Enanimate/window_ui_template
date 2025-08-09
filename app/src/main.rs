@@ -49,7 +49,8 @@ impl App {
         let mut interface = Interface::new();
 
         interface.show(|ui| {
-            ui.add_button(Button::new());
+            ui.add_button(Button::new([-100.0, -100.0], [1.0, 0.0, 0.0, 1.0], [100.0, 50.0]));
+            ui.add_button(Button::new([100.0, 100.0], [0.0, 0.0, 1.0, 1.0], [50.0, 100.0]));
         });
         return interface;
     }

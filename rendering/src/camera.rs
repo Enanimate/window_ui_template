@@ -42,7 +42,6 @@ impl Camera2D {
 
     pub(crate) fn build_view_projection_matrix(&self) -> Mat4 {
         let view_proj = self.build_projection_matrix() * self.build_view_matrix();
-        println!("View-Projection Matrix: {:?}", view_proj);
         view_proj
     }
 

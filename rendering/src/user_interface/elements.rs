@@ -1,48 +1,44 @@
-use crate::definitions::Vertex;
+use crate::definitions::GeometryType;
 
 pub trait Element {
-    fn identify_as(&mut self, id: u32);
-    fn draw(&self) -> (Vec<Vertex>, Vec<u16>);
+    fn get_geometry_type(&self) -> GeometryType;
+    fn get_position(&self) -> [f32; 2];
+    fn get_color(&self) -> [f32; 4];
+    fn get_scale(&self) -> [f32; 2];
 }
 
 pub struct Button {
-    id: u32,
+    pub geometry_type: GeometryType,
+    position: [f32; 2],
+    color: [f32; 4],
+    scale: [f32; 2],
 }
 
 impl Button {
-    pub fn new() -> Self {
+    pub fn new(position: [f32; 2], color: [f32; 4], scale: [f32; 2]) -> Self {
         Self {
-            id: 0,
+            geometry_type: GeometryType::Quad,
+            position,
+            color,
+            scale,
         }
     }
 }
 
 impl Element for Button {
-    fn identify_as(&mut self, id: u32) {
-        self.id = id;
+    fn get_geometry_type(&self) -> GeometryType {
+        self.geometry_type
     }
 
-    fn draw(&self) -> (Vec<Vertex>, Vec<u16>) {
-        let indices = [0, 1, 2, 2, 3, 0].to_vec();
-        let vertices = [
-            Vertex {
-                position: [-100.0, -100.0], // Bottom-left corner of a 200x200 area
-                color: [1.0, 0.0, 0.0, 1.0],
-            },
-            Vertex {
-                position: [100.0, -100.0], // Bottom-right corner
-                color: [1.0, 0.0, 0.0, 1.0],
-            },
-            Vertex {
-                position: [100.0, 100.0],   // Top-middle corner
-                color: [1.0, 0.0, 0.0, 1.0],
-            },
-            Vertex {
-                position: [-100.0, 100.0],
-                color: [1.0, 0.0, 0.0, 1.0],
-            }
-        ].to_vec();
+    fn get_position(&self) -> [f32; 2] {
+        self.position
+    }
 
-        return (vertices, indices);
+    fn get_scale(&self) -> [f32; 2] {
+        self.scale
+    }
+
+    fn get_color(&self) -> [f32; 4] {
+        self.color
     }
 }
