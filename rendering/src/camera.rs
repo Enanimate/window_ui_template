@@ -9,7 +9,6 @@ pub(crate) struct Camera2DUniform {
 
 pub(crate) struct Camera2D {
     position: Vec2,
-    zoom: f32,
     screen_size: PhysicalSize<u32>,
 }
 
@@ -17,22 +16,21 @@ impl Camera2D {
     pub(crate) fn new(screen_width: u32, screen_height: u32) -> Self {
         Self { 
             position: Vec2::new(0.0, 0.0), 
-            zoom: 1.5,
             screen_size: PhysicalSize::new(screen_width, screen_height),
         }
     }
 
     fn build_projection_matrix(&self) -> Mat4 {
-        let half_width = (self.screen_size.width as f32 / 2.0) / self.zoom;
-        let half_height = (self.screen_size.height as f32 / 2.0) / self.zoom;
+        let width = self.screen_size.width as f32;
+        let height = self.screen_size.height as f32;
 
         Mat4::orthographic_rh_gl(
-            -half_width,
-            half_width,
-            -half_height,
-            half_height,
-            -100.0,
-            100.0,
+            0.0,
+            width,
+            0.0,
+            height,
+            -1.0,
+            1.0,
         )
     }
 

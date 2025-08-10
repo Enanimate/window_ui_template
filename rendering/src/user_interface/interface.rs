@@ -6,7 +6,7 @@ use wgpu::{Device, Queue};
 use crate::{definitions::{GeometryType, Instance, InstanceRaw, Vertex}, user_interface::{elements::Element, UserInterface}};
 
 pub struct Interface {
-    elements: Vec<Box<dyn Element>>,
+    pub elements: Vec<Box<dyn Element>>,
     instances: HashMap<GeometryType, Vec<InstanceRaw>>,
     max_index: u32,
     vertex_buffers: HashMap<GeometryType, wgpu::Buffer>,
@@ -42,20 +42,16 @@ impl Interface {
             let indices = [0, 1, 2, 2, 3, 0].to_vec();
             let vertices = [
                 Vertex {
-                    position: [-1.0, -1.0], // Bottom-left corner of a 200x200 area
-                    color: [1.0, 0.0, 0.0, 1.0],
+                    position: [-0.5, -0.5], // Bottom-left of a unit quad
                 },
                 Vertex {
-                    position: [1.0, -1.0], // Bottom-right corner
-                    color: [1.0, 0.0, 0.0, 1.0],
+                    position: [0.5, -0.5], // Bottom-right
                 },
                 Vertex {
-                    position: [1.0, 1.0],   // Top-middle corner
-                    color: [1.0, 0.0, 0.0, 1.0],
+                    position: [0.5, 0.5],  // Top-right
                 },
                 Vertex {
-                    position: [-1.0, 1.0],
-                    color: [1.0, 0.0, 0.0, 1.0],
+                    position: [-0.5, 0.5], // Top-left
                 }
             ].to_vec();
             (vertices, indices)
@@ -63,11 +59,11 @@ impl Interface {
         }
     }
 
-    pub fn initialize_interface_buffers(&mut self, device: &Device, queue: &Queue) {
+    pub fn initialize_interface_buffers(&mut self, device: &Device, queue: &Queue, window_size: [u32; 2]) {
         let mut batched_instances: HashMap<GeometryType, Vec<InstanceRaw>> = HashMap::new();
 
         for element in &self.elements {
-            let instance = Instance::new(element.get_geometry_type(), element.get_position(), element.get_color(), element.get_scale());
+            let instance = Instance::new(element.get_geometry_type(), element.get_position(window_size), element.get_color(), element.get_scale(window_size));
             let raw_instances = instance.to_raw();
             batched_instances
                 .entry(element.get_geometry_type())

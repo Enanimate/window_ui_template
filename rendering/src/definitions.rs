@@ -2,7 +2,6 @@
 #[derive(bytemuck::Pod, bytemuck::Zeroable, Clone, Copy)]
 pub struct Vertex {
     pub position: [f32; 2],
-    pub color: [f32; 4],
 }
 
 impl Vertex {
@@ -16,11 +15,6 @@ impl Vertex {
                     shader_location: 0,
                     format: wgpu::VertexFormat::Float32x2,
                 },
-                wgpu::VertexAttribute {
-                    offset: std::mem::size_of::<[f32; 2]>() as wgpu::BufferAddress,
-                    shader_location: 1,
-                    format: wgpu::VertexFormat::Float32x4,
-                }
             ]
         }
     }

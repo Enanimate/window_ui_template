@@ -1,8 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use rendering::{user_interface::{elements::Button, interface::Interface}, RenderState};
-use winit::{application::ApplicationHandler, event::WindowEvent, event_loop::EventLoop, window::Window};
-
+use winit::{application::ApplicationHandler, dpi::PhysicalSize, event::{MouseButton, WindowEvent}, event_loop::EventLoop, window::Window};
 
 mod utils;
 
@@ -14,6 +13,8 @@ struct App {
     render_state: Option<RenderState>,
     window_ref: Option<Arc<Window>>,
     interface: Arc<Mutex<Interface>>,
+    window_size: PhysicalSize<u32>,
+    cursor_position: [f32; 2],
 }
 
 impl App {
@@ -22,6 +23,8 @@ impl App {
             render_state: None,
             window_ref: None,
             interface: Arc::new(Mutex::new(Interface::new())),
+            window_size: PhysicalSize::new(0, 0),
+            cursor_position: [0.0, 0.0],
         };
 
         env_logger::init();
@@ -30,14 +33,29 @@ impl App {
         event_loop.run_app(&mut app).unwrap();
     }
 
+    fn handle_click(&self, cursor_position: [f32; 2]) {
+        let interface_guard = self.interface.lock().unwrap();
+        let window_size = [self.window_size.width, self.window_size.height];
+
+        for element in &interface_guard.elements {
+            let element_position = element.get_position(window_size);
+            let element_scale = element.get_scale(window_size);
+
+            if element.is_cursor_within_bounds(cursor_position, element_position, element_scale) {
+                element.handle_click();
+            }
+        }
+    }
+
     fn rebuild_interface(&mut self) {
+        println!("window size: {:?}", self.window_size);
         let new_interface_data = Self::build_project_view();
 
         if let Some(rs) = self.render_state.as_mut() {
             let mut interface_guard = self.interface.lock().unwrap();
             *interface_guard = new_interface_data;
 
-            interface_guard.initialize_interface_buffers(&rs.device, &rs.queue);
+            interface_guard.initialize_interface_buffers(&rs.device, &rs.queue, [self.window_size.width, self.window_size.height]);
         } else {
             log::warn!("Attempted to rebuild interface but render_state was None. Cannot initialize GPU buffers.");
             let mut interface_guard = self.interface.lock().unwrap();
@@ -49,8 +67,14 @@ impl App {
         let mut interface = Interface::new();
 
         interface.show(|ui| {
-            ui.add_button(Button::new([-100.0, -100.0], [1.0, 0.0, 0.0, 1.0], [100.0, 50.0]));
-            ui.add_button(Button::new([100.0, 100.0], [0.0, 0.0, 1.0, 1.0], [50.0, 100.0]));
+            ui.add_button(Button::new(
+                    [0.5, 0.5], 
+                    [1.0, 0.0, 0.0, 1.0], 
+                    [0.1, 0.1], 
+                    Box::new(|| {println!("Clicked")})
+                )
+            );
+            //ui.add_button(Button::new([0.0, 0.0], [0.0, 0.0, 1.0, 1.0], [0.0, 0.0], [window_size.width, window_size.height]));
         });
         return interface;
     }
@@ -58,7 +82,8 @@ impl App {
 
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
-        let window = Arc::new(event_loop.create_window(Window::default_attributes()).unwrap());
+        let window_attributes = Window::default_attributes().with_maximized(true);
+        let window = Arc::new(event_loop.create_window(window_attributes).unwrap());
 
         let interface_arc = Arc::clone(&self.interface);
 
@@ -69,7 +94,7 @@ impl ApplicationHandler for App {
 
         if let Some(rs) = self.render_state.as_mut() {
             let mut interface_guard = self.interface.lock().unwrap();
-            interface_guard.initialize_interface_buffers(&rs.device, &rs.queue);
+            interface_guard.initialize_interface_buffers(&rs.device, &rs.queue, [self.window_size.width, self.window_size.height]);
         }
     }
 
@@ -80,9 +105,13 @@ impl ApplicationHandler for App {
         event: winit::event::WindowEvent,
     ) {
         let current_window_size = self.window_ref.as_ref().unwrap().inner_size();
+
+        let mut needs_rebuild = false;
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
             WindowEvent::Resized(size) => {
+                self.window_size = size;
+                needs_rebuild = true;
                 if let Some(rs) = self.render_state.as_mut() {
                     rs.resize(size.width, size.height);
                 }
@@ -100,11 +129,23 @@ impl ApplicationHandler for App {
                     }
                 }
             }
+            WindowEvent::CursorMoved { position, .. } => {
+                self.cursor_position = [position.x as f32, position.y as f32];
+            }
+            WindowEvent::MouseInput { state, button, .. } => {
+                if button == MouseButton::Left && state.is_pressed() {
+                    self.handle_click(self.cursor_position);
+                }
+            }
             _ => ()
         }
 
         if let Some(window_arc) = self.window_ref.as_ref() {
-                window_arc.request_redraw();
-            }
+            window_arc.request_redraw();
+        }
+
+        if needs_rebuild {
+            self.rebuild_interface();
+        }
     }
 }
