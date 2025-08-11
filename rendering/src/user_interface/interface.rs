@@ -2,8 +2,9 @@ use core::option::Option::Some;
 use std::collections::HashMap;
 
 use wgpu::{Device, Queue};
+use wgpu_text::{glyph_brush::{ab_glyph::FontRef, Section, Text}, BrushBuilder, TextBrush};
 
-use crate::{definitions::{GeometryType, Instance, InstanceRaw, Vertex}, user_interface::{elements::Element, UserInterface}};
+use crate::{definitions::{GeometryType, Instance, InstanceRaw, UiAtlas, Vertex}, user_interface::{elements::Element, UserInterface}};
 
 pub struct Interface {
     pub elements: Vec<Box<dyn Element>>,
@@ -12,10 +13,12 @@ pub struct Interface {
     vertex_buffers: HashMap<GeometryType, wgpu::Buffer>,
     index_buffers: HashMap<GeometryType, wgpu::Buffer>,
     instance_buffers: HashMap<GeometryType, wgpu::Buffer>,
+    brush: Option<TextBrush<FontRef<'static>>>,
+    atlas: UiAtlas,
 }
 
 impl Interface {
-    pub fn new() -> Self {
+    pub fn new(atlas: UiAtlas) -> Self {
         Self {
             elements: Vec::new(),
             instances: HashMap::new(),
@@ -23,6 +26,8 @@ impl Interface {
             vertex_buffers: HashMap::new(),
             index_buffers: HashMap::new(),
             instance_buffers: HashMap::new(),
+            brush: None,
+            atlas,
         }
     }
 
@@ -31,7 +36,8 @@ impl Interface {
         elements_builder(&mut user_interface)
     }
 
-    pub fn add_elements(&mut self, element: impl Element + 'static) {
+    pub fn add_elements(&mut self, mut element: impl Element + 'static) {
+        element.set_id(self.max_index);
         self.elements.push(Box::new(element));
         self.max_index += 1;
     }
@@ -39,32 +45,73 @@ impl Interface {
     pub fn geometry_vertices(geometry_type: &GeometryType) -> (Vec<Vertex>, Vec<u16>) {
         match geometry_type {
             GeometryType::Quad => {
-            let indices = [0, 1, 2, 2, 3, 0].to_vec();
-            let vertices = [
-                Vertex {
-                    position: [-0.5, -0.5], // Bottom-left of a unit quad
-                },
-                Vertex {
-                    position: [0.5, -0.5], // Bottom-right
-                },
-                Vertex {
-                    position: [0.5, 0.5],  // Top-right
-                },
-                Vertex {
-                    position: [-0.5, 0.5], // Top-left
-                }
-            ].to_vec();
-            (vertices, indices)
+                let indices = [0, 1, 2, 2, 3, 0].to_vec();
+                let vertices = [
+                    Vertex {
+                        position: [-0.5, -0.5], // Bottom-left
+                        quad_uv: [0.0, 1.0],
+                    },
+                    Vertex {
+                        position: [0.5, -0.5], // Bottom-right
+                        quad_uv: [1.0, 1.0],
+                    },
+                    Vertex {
+                        position: [0.5, 0.5],  // Top-right
+                        quad_uv: [1.0, 0.0],
+                    },
+                    Vertex {
+                        position: [-0.5, 0.5], // Top-left
+                        quad_uv: [0.0, 0.0],
+                    }
+                ].to_vec();
+                (vertices, indices)
+            },
+            GeometryType::Label => {
+                let indices = [0, 1, 2, 2, 3, 0].to_vec();
+                let vertices = [
+                    Vertex {
+                        position: [0.0, 0.0],
+                        quad_uv: [0.0, 1.0],
+                    },
+                    Vertex {
+                        position: [0.0, 0.0],
+                        quad_uv: [1.0, 1.0],
+                    },
+                    Vertex {
+                        position: [0.0, 0.0],
+                        quad_uv: [1.0, 0.0],
+                    },
+                    Vertex {
+                        position: [0.0, 0.0],
+                        quad_uv: [0.0, 0.0],
+                    }
+                ].to_vec();
+                (vertices, indices)
             },
         }
     }
 
-    pub fn initialize_interface_buffers(&mut self, device: &Device, queue: &Queue, window_size: [u32; 2]) {
+    pub fn initialize_interface_buffers(&mut self, device: &Device, queue: &Queue, window_size: [u32; 2], config: &wgpu::SurfaceConfiguration) {
         let mut batched_instances: HashMap<GeometryType, Vec<InstanceRaw>> = HashMap::new();
+        let font_bytes = include_bytes!("../../../ComicMono.ttf");
+        let atlas = &self.atlas;
 
+        self.brush = Some(BrushBuilder::using_font_bytes(font_bytes)
+            .unwrap()
+            .build(device, config.width, config.height, config.format));
+        
         for element in &self.elements {
-            let instance = Instance::new(element.get_geometry_type(), element.get_position(window_size), element.get_color(), element.get_scale(window_size));
-            let raw_instances = instance.to_raw();
+            let atlas_entry = atlas.clone().get_entry_by_name(element.get_texture_name().unwrap_or("solid".to_string())).unwrap();
+            let tex_coords = [
+                atlas_entry.start_coord.unwrap().0,
+                atlas_entry.start_coord.unwrap().1,
+                atlas_entry.end_coord.unwrap().0,
+                atlas_entry.end_coord.unwrap().1,
+            ];
+
+            let instance = Instance::new(element.get_id(), element.get_geometry_type(), element.get_position(window_size), element.get_color(), element.get_scale(window_size));
+            let mut raw_instances = instance.to_raw();
+            raw_instances.tex_coords = tex_coords;
             batched_instances
                 .entry(element.get_geometry_type())
                 .or_insert(Vec::new())
@@ -101,10 +148,13 @@ impl Interface {
         }
 
         self.instances = batched_instances;
-        self.update_vertices(queue);
+        self.update_vertices(queue, device, window_size);
     }
 
-    pub fn update_vertices(&mut self, queue: &Queue) {
+    pub fn update_vertices(&mut self, queue: &Queue, device: &Device, window_size: [u32; 2]) {
+        self.brush.as_ref().unwrap().resize_view(window_size[0] as f32, window_size[1] as f32, queue);
+        let mut sections: Vec<Section> = Vec::new();
+
         for (geometry_type, instances) in self.instances.iter() {
             let (vertices, indices) = Self::geometry_vertices(geometry_type);
 
@@ -117,10 +167,44 @@ impl Interface {
             if let Some(instance_buffer) = self.instance_buffers.get(geometry_type) {
                 queue.write_buffer(instance_buffer, 0, bytemuck::cast_slice(instances));
             }
+
+            if geometry_type == &GeometryType::Label {
+                for instance in instances {
+                    let label_element = self.elements.iter().find(|e| e.get_id() == instance.id).expect("Failed to find an element with and id matching the instance...");
+                    let text = label_element.get_text().expect("Label element contained no text...");
+                    let text_color = label_element.get_color();
+                    let bounds = label_element.get_bounds();
+                    println!("{:?}", bounds);
+
+                    let mut section = Section::builder()
+                        .with_screen_position([window_size[0] as f32 / 2.0, window_size[1] as f32 / 2.0])
+                        .with_text(vec![
+                            Text::new(text)
+                                .with_scale(30.0)
+                                .with_color(text_color)
+                        ]);
+
+                    if bounds.is_some() {
+                        section = section.with_bounds([bounds.unwrap(), 30.0]);
+                    }
+                    sections.push(section);
+                }
+            }
+        }
+        if !sections.is_empty() {
+            self.brush.as_mut().unwrap().queue(device, queue, sections).unwrap();
         }
     }
 
-    pub fn render(&self, render_pass: &mut wgpu::RenderPass) {
+    pub(crate)  fn draw_text_brush<'a>( &'a self, renderpass: &mut wgpu::RenderPass<'a>) {
+        if let Some(brush) = self.brush.as_ref() {
+            brush.draw(renderpass);
+        } else {
+            eprintln!("Warning: Brush not initialized for drawing.");
+        }
+    }
+
+    pub fn render<'a>(&'a self, render_pass: &mut wgpu::RenderPass<'a>) {
         for (geometry_type, instances) in self.instances.iter() {
             let vertex_buffer = self.vertex_buffers.get(geometry_type).unwrap();
             let index_buffer = self.index_buffers.get(geometry_type).unwrap();

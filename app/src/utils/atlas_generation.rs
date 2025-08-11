@@ -5,9 +5,8 @@ use rendering::definitions::{UiAtlas, UiAtlasTexture};
 
 
 
-pub fn _generate_texture_atlas() -> UiAtlas {
+pub fn generate_texture_atlas() -> UiAtlas {
     let mut images: Vec<(DynamicImage, String)> = Vec::new();
-    //let a = include_bytes!(".././assets/folder-1484.png");
     let assets_dir = fs::read_dir(r"./app/assets").unwrap()
         .map(|res| res.map(|e| e.path()))
         .collect::<Result<Vec<_>, io::Error>>().unwrap();

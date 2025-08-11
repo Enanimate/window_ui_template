@@ -1,12 +1,15 @@
 use std::sync::{Arc, Mutex};
 
-use rendering::{user_interface::{elements::Button, interface::Interface}, RenderState};
+use rendering::{definitions::UiAtlas, user_interface::{elements::{Button, Label}, interface::Interface}, RenderState};
 use winit::{application::ApplicationHandler, dpi::PhysicalSize, event::{MouseButton, WindowEvent}, event_loop::EventLoop, window::Window};
+
+use crate::utils::{atlas_generation::generate_texture_atlas, componenents::list};
 
 mod utils;
 
 fn main() {
-    App::new();
+    let atlas = generate_texture_atlas();
+    App::new(atlas);
 }
 
 struct App {
@@ -15,16 +18,18 @@ struct App {
     interface: Arc<Mutex<Interface>>,
     window_size: PhysicalSize<u32>,
     cursor_position: [f32; 2],
+    atlas: UiAtlas,
 }
 
 impl App {
-    fn new() {
+    fn new(atlas: UiAtlas) {
         let mut app = Self {
             render_state: None,
             window_ref: None,
-            interface: Arc::new(Mutex::new(Interface::new())),
+            interface: Arc::new(Mutex::new(Interface::new(atlas.clone()))),
             window_size: PhysicalSize::new(0, 0),
             cursor_position: [0.0, 0.0],
+            atlas,
         };
 
         env_logger::init();
@@ -49,13 +54,13 @@ impl App {
 
     fn rebuild_interface(&mut self) {
         println!("window size: {:?}", self.window_size);
-        let new_interface_data = Self::build_project_view();
+        let new_interface_data = Self::build_project_view(self.atlas.clone());
 
         if let Some(rs) = self.render_state.as_mut() {
             let mut interface_guard = self.interface.lock().unwrap();
             *interface_guard = new_interface_data;
 
-            interface_guard.initialize_interface_buffers(&rs.device, &rs.queue, [self.window_size.width, self.window_size.height]);
+            interface_guard.initialize_interface_buffers(&rs.device, &rs.queue, [self.window_size.width, self.window_size.height], &rs.config);
         } else {
             log::warn!("Attempted to rebuild interface but render_state was None. Cannot initialize GPU buffers.");
             let mut interface_guard = self.interface.lock().unwrap();
@@ -63,19 +68,30 @@ impl App {
         }
     }
 
-    fn build_project_view() -> Interface {
-        let mut interface = Interface::new();
+    fn build_project_view(atlas: UiAtlas) -> Interface {
+        let mut interface = Interface::new(atlas);
 
         interface.show(|ui| {
             ui.add_button(Button::new(
                     [0.5, 0.5], 
-                    [1.0, 0.0, 0.0, 1.0], 
+                    [1.0, 1.0, 1.0, 1.0], 
                     [0.1, 0.1], 
-                    Box::new(|| {println!("Clicked")})
+                    Box::new(|| {println!("Clicked")}),
+                    "folder-1484"
                 )
             );
-            //ui.add_button(Button::new([0.0, 0.0], [0.0, 0.0, 1.0, 1.0], [0.0, 0.0], [window_size.width, window_size.height]));
+            ui.add_label(Label::new(
+                    "Null", 
+                    [0.5, 0.5], 
+                [0.1, 0.1],
+                [1.0, 0.0, 0.0, 1.0]
+                )
+                .with_bounds(5.0)
+            );
         });
+
+        interface = list(interface);
+
         return interface;
     }
 }
@@ -94,7 +110,7 @@ impl ApplicationHandler for App {
 
         if let Some(rs) = self.render_state.as_mut() {
             let mut interface_guard = self.interface.lock().unwrap();
-            interface_guard.initialize_interface_buffers(&rs.device, &rs.queue, [self.window_size.width, self.window_size.height]);
+            interface_guard.initialize_interface_buffers(&rs.device, &rs.queue, [self.window_size.width, self.window_size.height], &rs.config);
         }
     }
 

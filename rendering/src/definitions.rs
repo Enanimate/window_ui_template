@@ -2,6 +2,7 @@
 #[derive(bytemuck::Pod, bytemuck::Zeroable, Clone, Copy)]
 pub struct Vertex {
     pub position: [f32; 2],
+    pub quad_uv: [f32; 2],
 }
 
 impl Vertex {
@@ -15,12 +16,18 @@ impl Vertex {
                     shader_location: 0,
                     format: wgpu::VertexFormat::Float32x2,
                 },
+                wgpu::VertexAttribute {
+                    offset: std::mem::size_of::<[f32; 2]>() as wgpu::BufferAddress,
+                    shader_location: 1,
+                    format: wgpu::VertexFormat::Float32x2,
+                },
             ]
         }
     }
 }
 
 pub struct Instance {
+    id: u32,
     pub geometry_type: GeometryType,
     position: [f32; 2],
     color: [f32; 4],
@@ -28,9 +35,10 @@ pub struct Instance {
 }
 
 impl Instance {
-    pub fn new(geometry_type: GeometryType, position: [f32; 2], color: [f32; 4], scale: [f32; 2]) -> Self {
+    pub fn new(id: u32, geometry_type: GeometryType, position: [f32; 2], color: [f32; 4], scale: [f32; 2]) -> Self {
         Self { 
-            geometry_type: geometry_type, 
+            id,
+            geometry_type, 
             position,
             color,
             scale,
@@ -39,9 +47,11 @@ impl Instance {
 
     pub fn to_raw(&self) -> InstanceRaw {
         InstanceRaw {
+            id: self.id,
             position: self.position,
             color: self.color,
             scale: self.scale,
+            tex_coords: [0.0, 0.0, 0.0, 0.0]
         }
     }
 }
@@ -49,9 +59,11 @@ impl Instance {
 #[repr(C)]
 #[derive(bytemuck::Pod, bytemuck::Zeroable, Clone, Copy)]
 pub struct InstanceRaw {
+    pub id: u32,
     position: [f32; 2],
     color: [f32; 4],
     scale: [f32; 2],
+    pub tex_coords: [f32; 4],
 }
 
 impl InstanceRaw {
@@ -63,17 +75,27 @@ impl InstanceRaw {
                 wgpu::VertexAttribute {
                     shader_location: 2,
                     offset: 0,
-                    format: wgpu::VertexFormat::Float32x2,
+                    format: wgpu::VertexFormat::Uint32,
                 },
                 wgpu::VertexAttribute {
                     shader_location: 3,
-                    offset: std::mem::size_of::<[f32; 2]>() as wgpu::BufferAddress,
+                    offset: std::mem::size_of::<u32>() as wgpu::BufferAddress,
+                    format: wgpu::VertexFormat::Float32x2,
+                },
+                wgpu::VertexAttribute {
+                    shader_location: 4,
+                    offset: std::mem::size_of::<u32>() as wgpu::BufferAddress + std::mem::size_of::<[f32; 2]>() as wgpu::BufferAddress,
                     format: wgpu::VertexFormat::Float32x4,
                 },
                 wgpu::VertexAttribute {
-                    offset: std::mem::size_of::<[f32; 2]>() as wgpu::BufferAddress + std::mem::size_of::<[f32; 4]>() as wgpu::BufferAddress,
-                    shader_location: 4,
+                    offset: std::mem::size_of::<u32>() as wgpu::BufferAddress + std::mem::size_of::<[f32; 2]>() as wgpu::BufferAddress + std::mem::size_of::<[f32; 4]>() as wgpu::BufferAddress,
+                    shader_location: 5,
                     format: wgpu::VertexFormat::Float32x2,
+                },
+                wgpu::VertexAttribute {
+                    offset: std::mem::size_of::<u32>() as wgpu::BufferAddress + std::mem::size_of::<[f32; 2]>() as wgpu::BufferAddress + std::mem::size_of::<[f32; 4]>() as wgpu::BufferAddress + std::mem::size_of::<[f32; 2]>() as wgpu::BufferAddress,
+                    shader_location: 6,
+                    format: wgpu::VertexFormat::Float32x4,
                 },
             ],
         }
@@ -82,7 +104,8 @@ impl InstanceRaw {
 
 #[derive(Eq, Hash, PartialEq, Clone, Copy)]
 pub enum GeometryType {
-    Quad
+    Quad,
+    Label
 }
 
 
@@ -104,6 +127,10 @@ impl UiAtlas {
 
     pub fn add_entry(&mut self, entry: UiAtlasTexture) {
         self.entries.push(entry.generate_tex_coords(self.width, self.height));
+    }
+
+    pub fn get_entry_by_name(&self, name: String) -> Option<UiAtlasTexture> {
+        self.entries.iter().find(|entry| entry.name == name).cloned()
     }
 }
 

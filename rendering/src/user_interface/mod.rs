@@ -4,7 +4,7 @@ pub mod interface;
 pub mod elements;
 
 pub struct UserInterface<'a> {
-    interface: &'a mut Interface
+    interface: &'a mut Interface,
 }
 
 impl<'a> UserInterface<'a> {
@@ -13,6 +13,10 @@ impl<'a> UserInterface<'a> {
     }
 
     pub fn add_button(&mut self, element: impl Element + 'static) {
+        self.interface.add_elements(element);
+    }
+
+    pub fn add_label(&mut self, element: impl Element + 'static) {
         self.interface.add_elements(element);
     }
 }
