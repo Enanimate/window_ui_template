@@ -132,7 +132,9 @@ impl Element for Label {
     }
 
     fn get_position(&self, window_size: [u32; 2]) -> [f32; 2] {
-        [self.relative_position[0] * window_size[0] as f32, self.relative_position[1] * window_size[1] as f32]
+        let text_length = (self.text.chars().count() as f32 * 15.0) / 2.0;
+        let text_height = 30.0 / 2.0;
+        [self.relative_position[0] * window_size[0] as f32 - text_length, self.relative_position[1] * window_size[1] as f32 - text_height]
     }
 
     fn get_color(&self) -> [f32; 4] {

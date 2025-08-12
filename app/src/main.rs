@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-use rendering::{definitions::UiAtlas, user_interface::{elements::{Button, Label}, interface::Interface}, RenderState};
+use rendering::{definitions::UiAtlas, user_interface::interface::Interface, RenderState};
 use winit::{application::ApplicationHandler, dpi::PhysicalSize, event::{MouseButton, WindowEvent}, event_loop::EventLoop, window::Window};
 
 use crate::utils::{atlas_generation::generate_texture_atlas, componenents::list};
@@ -72,22 +72,7 @@ impl App {
         let mut interface = Interface::new(atlas);
 
         interface.show(|ui| {
-            ui.add_button(Button::new(
-                    [0.5, 0.5], 
-                    [1.0, 1.0, 1.0, 1.0], 
-                    [0.1, 0.1], 
-                    Box::new(|| {println!("Clicked")}),
-                    "folder-1484"
-                )
-            );
-            ui.add_label(Label::new(
-                    "Null", 
-                    [0.5, 0.5], 
-                [0.1, 0.1],
-                [1.0, 0.0, 0.0, 1.0]
-                )
-                .with_bounds(5.0)
-            );
+            
         });
 
         interface = list(interface);

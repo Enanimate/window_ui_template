@@ -177,7 +177,7 @@ impl Interface {
                     println!("{:?}", bounds);
 
                     let mut section = Section::builder()
-                        .with_screen_position([window_size[0] as f32 / 2.0, window_size[1] as f32 / 2.0])
+                        .with_screen_position(label_element.get_position(window_size))
                         .with_text(vec![
                             Text::new(text)
                                 .with_scale(30.0)

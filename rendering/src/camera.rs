@@ -27,8 +27,8 @@ impl Camera2D {
         Mat4::orthographic_rh_gl(
             0.0,
             width,
-            0.0,
             height,
+            0.0,
             -1.0,
             1.0,
         )
