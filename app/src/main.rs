@@ -75,7 +75,7 @@ impl App {
             
         });
 
-        interface = list(interface);
+        //interface = list(interface);
 
         return interface;
     }

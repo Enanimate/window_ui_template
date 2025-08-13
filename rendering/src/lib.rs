@@ -3,7 +3,7 @@ use std::{error::Error, sync::{Arc, Mutex}};
 use wgpu::util::DeviceExt;
 use winit::{dpi::PhysicalSize, window::Window};
 
-use crate::{camera::{Camera2D, Camera2DUniform}, definitions::{InstanceRaw, Vertex}, pipeline::PipeLineBuilder, user_interface::interface::Interface};
+use crate::{camera::{Camera2D, Camera2DUniform}, definitions::{ColorExt, InstanceRaw, Vertex}, pipeline::PipeLineBuilder, user_interface::interface::Interface};
 
 mod camera;
 mod pipeline;
@@ -263,7 +263,7 @@ impl RenderState {
                     view: &view,
                     resolve_target: None,
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color { r: 0.0, g: 1.0, b: 0.0, a: 1.0 }),
+                        load: wgpu::LoadOp::Clear(wgpu::Color::from_hex("#21262d")),
                         store: wgpu::StoreOp::Store
                     },
                     depth_slice: None
