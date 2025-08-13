@@ -1,6 +1,6 @@
 use std::sync::{Arc, Mutex};
 
-use rendering::{definitions::UiAtlas, user_interface::interface::Interface, RenderState};
+use rendering::{definitions::UiAtlas, user_interface::{elements::{InteractionResult, UiEvent}, interface::Interface}, RenderState};
 use winit::{application::ApplicationHandler, dpi::PhysicalSize, event::{MouseButton, WindowEvent}, event_loop::EventLoop, window::Window};
 
 use crate::utils::{atlas_generation::generate_texture_atlas, componenents::list};
@@ -38,7 +38,7 @@ impl App {
         event_loop.run_app(&mut app).unwrap();
     }
 
-    fn handle_click(&self, cursor_position: [f32; 2]) {
+    fn handle_click(&self, cursor_position: [f32; 2]) -> InteractionResult {
         let interface_guard = self.interface.lock().unwrap();
         let window_size = [self.window_size.width, self.window_size.height];
 
@@ -47,9 +47,10 @@ impl App {
             let element_scale = element.get_scale(window_size);
 
             if element.is_cursor_within_bounds(cursor_position, element_position, element_scale) {
-                element.handle_click();
+                return element.handle_click();
             }
         }
+        return InteractionResult::None;
     }
 
     fn rebuild_interface(&mut self) {
@@ -71,8 +72,36 @@ impl App {
     fn build_project_view(atlas: UiAtlas) -> Interface {
         let mut interface = Interface::new(atlas);
 
+        // Header
         interface.show(|ui| {
-            
+            let header_y = 0.008;
+            ui.add_panel(
+                [0.5, header_y], 
+                "#0d1117ff", 
+                [1.0, header_y * 2.0], 
+                "solid"
+            );
+            ui.add_prop_button(
+                [0.98, header_y], 
+                "#ff0000ff", 
+                [0.04, header_y], 
+                Box::new(|| {UiEvent::CloseRequested}), 
+                "solid"
+            );
+            ui.add_prop_button(
+                [0.93, header_y], 
+                "#ff0000ff", 
+                [0.04, header_y], 
+                Box::new(|| {UiEvent::ResizeRequested}), 
+                "solid"
+            );
+            ui.add_prop_button(
+                [0.88, header_y], 
+                "#ff0000ff", 
+                [0.04, header_y], 
+                Box::new(|| {UiEvent::SetMinimized}), 
+                "solid"
+            );
         });
 
         //interface = list(interface);
@@ -83,7 +112,7 @@ impl App {
 
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
-        let window_attributes = Window::default_attributes().with_maximized(true);
+        let window_attributes = Window::default_attributes().with_maximized(true).with_decorations(false);
         let window = Arc::new(event_loop.create_window(window_attributes).unwrap());
 
         let interface_arc = Arc::clone(&self.interface);
@@ -135,7 +164,19 @@ impl ApplicationHandler for App {
             }
             WindowEvent::MouseInput { state, button, .. } => {
                 if button == MouseButton::Left && state.is_pressed() {
-                    self.handle_click(self.cursor_position);
+                    let window_ref = self.window_ref.clone().unwrap();
+                    match self.handle_click(self.cursor_position) {
+                        InteractionResult::Success => (),
+                        InteractionResult::Propogate(ui_event) => {
+                            match ui_event {
+                                UiEvent::CloseRequested => event_loop.exit(),
+                                UiEvent::SetMinimized => window_ref.set_minimized(true),
+                                UiEvent::ResizeRequested => window_ref.set_maximized(!window_ref.is_maximized()),
+                                //_ => unimplemented!()
+                            }
+                        },
+                        InteractionResult::None => (),
+                    }
                 }
             }
             _ => ()

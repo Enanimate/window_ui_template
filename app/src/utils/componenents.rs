@@ -1,4 +1,4 @@
-use rendering::{definitions::{Color, ColorExt}, user_interface::interface::Interface};
+use rendering::user_interface::interface::Interface;
 
 /// Generates elements in a list format
 macro_rules! list {
@@ -20,7 +20,7 @@ macro_rules! list {
         println!("button: {:?}", position);
         $ui.add_button(
             position,
-            Color::from_hex($color).into_vec4(),
+            $color,
             scale,
             Box::new(|| {println!("Clicked")}),
             "solid",
@@ -46,7 +46,7 @@ macro_rules! list {
             $t,
             position,
             scale,
-            [1.0, 1.0, 1.0, 1.0],
+            "#ffffffff",
         );
         list!($ui, $position, $scale, $total_unique, $token_count, $($rest)*);
     };
