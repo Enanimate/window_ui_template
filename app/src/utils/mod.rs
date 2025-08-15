@@ -1,2 +1,3 @@
 pub mod atlas_generation;
-pub mod componenents;
+pub mod components;
+pub mod macros;

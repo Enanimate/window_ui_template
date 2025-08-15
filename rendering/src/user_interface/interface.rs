@@ -9,7 +9,8 @@ use crate::{definitions::{GeometryType, Instance, InstanceRaw, UiAtlas, Vertex},
 pub struct Interface {
     pub elements: Vec<Box<dyn Element>>,
     instances: HashMap<GeometryType, Vec<InstanceRaw>>,
-    max_index: u32,
+    id_iterator: u32,
+    illegal_ids: Vec<u32>,
     vertex_buffers: HashMap<GeometryType, wgpu::Buffer>,
     index_buffers: HashMap<GeometryType, wgpu::Buffer>,
     instance_buffers: HashMap<GeometryType, wgpu::Buffer>,
@@ -22,7 +23,8 @@ impl Interface {
         Self {
             elements: Vec::new(),
             instances: HashMap::new(),
-            max_index: 0,
+            id_iterator: 0,
+            illegal_ids: Vec::new(),
             vertex_buffers: HashMap::new(),
             index_buffers: HashMap::new(),
             instance_buffers: HashMap::new(),
@@ -36,10 +38,19 @@ impl Interface {
         elements_builder(&mut user_interface)
     }
 
-    pub fn add_elements(&mut self, mut element: impl Element + 'static) {
-        element.set_id(self.max_index);
+    pub fn add_elements(&mut self, mut element: impl Element + 'static, id: Option<u32>) {
+        if let Some(id_number) = id {
+            element.set_id(id_number);
+            self.illegal_ids.push(id_number);
+        } else {
+            while self.illegal_ids.iter().any(|&i| i == self.id_iterator) {
+                self.id_iterator += 1;
+            }
+
+            element.set_id(self.id_iterator);
+        }
         self.elements.push(Box::new(element));
-        self.max_index += 1;
+        self.id_iterator += 1;
     }
 
     pub fn geometry_vertices(geometry_type: &GeometryType) -> (Vec<Vertex>, Vec<u16>) {
@@ -49,19 +60,19 @@ impl Interface {
                 let vertices = [
                     Vertex {
                         position: [-0.5, -0.5], // Bottom-left
-                        quad_uv: [0.0, 1.0],
+                        quad_uv: [0.0, 0.0],
                     },
                     Vertex {
                         position: [0.5, -0.5], // Bottom-right
-                        quad_uv: [1.0, 1.0],
-                    },
-                    Vertex {
-                        position: [0.5, 0.5],  // Top-right
                         quad_uv: [1.0, 0.0],
                     },
                     Vertex {
+                        position: [0.5, 0.5],  // Top-right
+                        quad_uv: [1.0, 1.0],
+                    },
+                    Vertex {
                         position: [-0.5, 0.5], // Top-left
-                        quad_uv: [0.0, 0.0],
+                        quad_uv: [0.0, 1.0],
                     }
                 ].to_vec();
                 (vertices, indices)
@@ -174,7 +185,6 @@ impl Interface {
                     let text = label_element.get_text().expect("Label element contained no text...");
                     let text_color = label_element.get_color();
                     let bounds = label_element.get_bounds();
-                    println!("{:?}", bounds);
 
                     let mut section = Section::builder()
                         .with_screen_position(label_element.get_position(window_size))

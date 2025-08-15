@@ -197,10 +197,12 @@ impl ColorExt for Color {
             let red: String = [chars.next().unwrap(), chars.next().unwrap()].iter().collect() ;
             let green: String = [chars.next().unwrap(), chars.next().unwrap()].iter().collect();
             let blue: String = [chars.next().unwrap(), chars.next().unwrap()].iter().collect();
+            let alpha: String = [chars.next().unwrap(), chars.next().unwrap()].iter().collect();
 
             let red_value = u32::from_str_radix(&red, 16).unwrap() as f64 / 255.0;
             let green_value = u32::from_str_radix(&green, 16).unwrap() as f64 / 255.0;
             let blue_value = u32::from_str_radix(&blue, 16).unwrap() as f64 / 255.0;
+            let alpha_value = u32::from_str_radix(&alpha, 16).unwrap() as f64 / 255.0;
 
             let (corrected_r, corrected_g, corrected_b) = Self::srgb_correction(red_value, green_value, blue_value);
             
@@ -208,7 +210,7 @@ impl ColorExt for Color {
                 r: corrected_r,
                 g: corrected_g,
                 b: corrected_b,
-                a: 1.0,
+                a: alpha_value,
             }
         } else {
             panic!("Color was not hex")

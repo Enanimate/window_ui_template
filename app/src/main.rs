@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 use rendering::{definitions::UiAtlas, user_interface::{elements::{InteractionResult, UiEvent}, interface::Interface}, RenderState};
 use winit::{application::ApplicationHandler, dpi::PhysicalSize, event::{MouseButton, WindowEvent}, event_loop::EventLoop, window::Window};
 
-use crate::utils::{atlas_generation::generate_texture_atlas, componenents::list};
+use crate::utils::{atlas_generation::generate_texture_atlas, components::header_componenet};
 
 mod utils;
 
@@ -18,6 +18,8 @@ struct App {
     interface: Arc<Mutex<Interface>>,
     window_size: PhysicalSize<u32>,
     cursor_position: [f32; 2],
+    hovered: Option<u32>,
+    last_hovered: u32,
     atlas: UiAtlas,
 }
 
@@ -29,6 +31,8 @@ impl App {
             interface: Arc::new(Mutex::new(Interface::new(atlas.clone()))),
             window_size: PhysicalSize::new(0, 0),
             cursor_position: [0.0, 0.0],
+            hovered: None,
+            last_hovered: 0,
             atlas,
         };
 
@@ -53,8 +57,32 @@ impl App {
         return InteractionResult::None;
     }
 
+    fn handle_hover(&self, cursor_position: [f32; 2]) -> Option<u32> {
+        let interface_guard = self.interface.lock().unwrap();
+        let window_size = [self.window_size.width, self.window_size.height];
+
+        for element in &interface_guard.elements {
+            let element_position = element.get_position(window_size);
+            let element_scale = element.get_scale(window_size);
+
+            if element.is_cursor_within_bounds(cursor_position, element_position, element_scale) {
+                return Some(element.get_id());
+            }
+        }
+        return None;
+    }
+
+    fn highlight(&self, alpha: f32) {
+        let mut interface_guard = self.interface.lock().unwrap();
+        
+        for element in &mut interface_guard.elements {
+            if element.get_id() == self.last_hovered {
+                element.set_highlight(alpha);
+            }
+        }
+    }
+
     fn rebuild_interface(&mut self) {
-        println!("window size: {:?}", self.window_size);
         let new_interface_data = Self::build_project_view(self.atlas.clone());
 
         if let Some(rs) = self.render_state.as_mut() {
@@ -72,36 +100,8 @@ impl App {
     fn build_project_view(atlas: UiAtlas) -> Interface {
         let mut interface = Interface::new(atlas);
 
-        // Header
         interface.show(|ui| {
-            let header_y = 0.008;
-            ui.add_panel(
-                [0.5, header_y], 
-                "#0d1117ff", 
-                [1.0, header_y * 2.0], 
-                "solid"
-            );
-            ui.add_prop_button(
-                [0.98, header_y], 
-                "#ff0000ff", 
-                [0.04, header_y], 
-                Box::new(|| {UiEvent::CloseRequested}), 
-                "solid"
-            );
-            ui.add_prop_button(
-                [0.93, header_y], 
-                "#ff0000ff", 
-                [0.04, header_y], 
-                Box::new(|| {UiEvent::ResizeRequested}), 
-                "solid"
-            );
-            ui.add_prop_button(
-                [0.88, header_y], 
-                "#ff0000ff", 
-                [0.04, header_y], 
-                Box::new(|| {UiEvent::SetMinimized}), 
-                "solid"
-            );
+            header_componenet(ui);
         });
 
         //interface = list(interface);
@@ -137,6 +137,7 @@ impl ApplicationHandler for App {
         let current_window_size = self.window_ref.as_ref().unwrap().inner_size();
 
         let mut needs_rebuild = false;
+        let mut needs_update = true;
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
             WindowEvent::Resized(size) => {
@@ -161,6 +162,18 @@ impl ApplicationHandler for App {
             }
             WindowEvent::CursorMoved { position, .. } => {
                 self.cursor_position = [position.x as f32, position.y as f32];
+                self.hovered = self.handle_hover(self.cursor_position);
+                if let Some(hovered) = self.hovered {
+                    if hovered != self.last_hovered {
+                        self.highlight(0.0);
+                        self.last_hovered = hovered;
+                    } else {
+                        self.highlight(1.0);
+                        needs_update = true;
+                    }
+                } else {
+                    self.highlight(0.0);
+                }
             }
             WindowEvent::MouseInput { state, button, .. } => {
                 if button == MouseButton::Left && state.is_pressed() {
@@ -184,6 +197,13 @@ impl ApplicationHandler for App {
 
         if let Some(window_arc) = self.window_ref.as_ref() {
             window_arc.request_redraw();
+        }
+
+        if needs_update {
+            if let Some(rs) = &self.render_state {
+                let mut interface_guard = self.interface.lock().unwrap();
+                interface_guard.initialize_interface_buffers(&rs.device, &rs.queue, [self.window_size.width, self.window_size.height], &rs.config);
+            }
         }
 
         if needs_rebuild {

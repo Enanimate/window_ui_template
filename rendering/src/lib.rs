@@ -13,7 +13,7 @@ pub mod user_interface;
 pub struct RenderState {
     interface_arc: Arc<Mutex<Interface>>,
 
-    window_size: PhysicalSize<u32>,
+    pub window_size: PhysicalSize<u32>,
     surface: wgpu::Surface<'static>,
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
@@ -117,6 +117,7 @@ impl RenderState {
             height: dimensions.1,
             depth_or_array_layers: 1,
         };
+        
         let diffuse_texture = device.create_texture(
             &wgpu::TextureDescriptor {
                 size: texture_size,
@@ -152,8 +153,8 @@ impl RenderState {
             address_mode_v: wgpu::AddressMode::ClampToEdge,
             address_mode_w: wgpu::AddressMode::ClampToEdge,
             mag_filter: wgpu::FilterMode::Linear,
-            min_filter: wgpu::FilterMode::Nearest,
-            mipmap_filter: wgpu::FilterMode::Nearest,
+            min_filter: wgpu::FilterMode::Linear,
+            mipmap_filter: wgpu::FilterMode::Linear,
             ..Default::default()
         });
 

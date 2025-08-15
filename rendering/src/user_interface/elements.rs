@@ -11,6 +11,7 @@ pub trait Element {
     fn get_bounds(&self) -> Option<f32>;
 
     fn set_id(&mut self, id: u32);
+    fn set_highlight(&mut self, a_value: f32);
 
     fn handle_click(&self) -> InteractionResult;
     fn is_cursor_within_bounds(&self, cursor_position: [f32; 2], element_pos: [f32; 2], element_scale: [f32;2]) -> bool;
@@ -75,6 +76,10 @@ impl Element for Panel {
         self.id = id
     }
 
+    fn set_highlight(&mut self, _a_value: f32) {
+        ()
+    }
+
     fn handle_click(&self) -> InteractionResult {
         InteractionResult::None
     }
@@ -82,6 +87,17 @@ impl Element for Panel {
     fn is_cursor_within_bounds(&self, _cursor_position: [f32; 2], _element_pos: [f32; 2], _element_scale: [f32;2]) -> bool {
         false
     }
+}
+
+pub enum UiEvent {
+    CloseRequested,
+    SetMinimized,
+    ResizeRequested
+}
+pub enum InteractionResult {
+    Success,
+    Propogate(UiEvent),
+    None
 }
 
 pub struct Button {
@@ -93,16 +109,6 @@ pub struct Button {
     on_click: Option<Box<dyn Fn() + Send + Sync>>,
     on_click_propogate: Option<Box<dyn Fn() -> UiEvent + 'static>>,
     texture_name: String,
-}
-pub enum UiEvent {
-    CloseRequested,
-    SetMinimized,
-    ResizeRequested
-}
-pub enum InteractionResult {
-    Success,
-    Propogate(UiEvent),
-    None
 }
 
 impl Button {
@@ -157,6 +163,10 @@ impl Element for Button {
 
     fn set_id(&mut self, id: u32) {
         self.id = id;
+    }
+
+    fn set_highlight(&mut self, a_value: f32) {
+        self.color[3] = a_value;
     }
 
     fn handle_click(&self) -> InteractionResult {
@@ -259,11 +269,87 @@ impl Element for Label {
         self.id = id;
     }
 
+    fn set_highlight(&mut self, _a_value: f32) {
+        ()
+    }
+
     fn handle_click(&self) -> InteractionResult {
         InteractionResult::None
     }
 
     fn is_cursor_within_bounds(&self, _cursor_position: [f32; 2], _element_pos: [f32; 2], _element_scale: [f32;2]) -> bool {
         false
+    }
+}
+
+pub struct Icon {
+    id: u32,
+    pub geometry_type: GeometryType,
+    relative_position: [f32; 2],
+    color: [f32; 4],
+    relative_scale: [f32; 2],
+    texture_name: String,
+}
+
+impl Icon {
+    pub fn new(relative_position: [f32; 2], color: [f32; 4], relative_scale: [f32; 2], texture_name: &str) -> Self {
+        Self {
+            id: 0,
+            geometry_type: GeometryType::Quad,
+            relative_position,
+            color,
+            relative_scale,
+            texture_name: texture_name.to_string(),
+        }
+    }
+}
+
+impl Element for Icon {
+    fn get_bounds(&self) -> Option<f32> {
+        None
+    }
+
+    fn get_id(&self) -> u32 {
+        self.id
+    }
+
+    fn get_geometry_type(&self) -> GeometryType {
+        self.geometry_type
+    }
+
+    fn get_position(&self, window_size: [u32; 2]) -> [f32; 2] {
+        [self.relative_position[0] * window_size[0] as f32, self.relative_position[1] * window_size[1] as f32]
+    }
+
+    fn get_scale(&self, _window_size: [u32; 2]) -> [f32; 2] {
+        [self.relative_scale[0], self.relative_scale[1]]
+    }
+
+    fn get_color(&self) -> [f32; 4] {
+        self.color
+    }
+
+    fn set_id(&mut self, id: u32) {
+        self.id = id;
+    }
+
+    fn set_highlight(&mut self, _a_value: f32) {
+        ()
+    }
+
+    fn handle_click(&self) -> InteractionResult {
+        InteractionResult::None
+    }
+
+    fn is_cursor_within_bounds(&self, _cursor_position: [f32; 2], _element_pos: [f32; 2], _element_scale: [f32;2]) -> bool {
+        false
+    }
+    
+    fn get_texture_name(&self) -> Option<String> {
+        Some(self.texture_name.clone())
+    }
+    
+    fn get_text(&self) -> Option<&str> {
+        None
     }
 }
