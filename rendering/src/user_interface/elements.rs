@@ -9,6 +9,7 @@ pub trait Element {
     fn get_texture_name(&self) -> Option<String>;
     fn get_text(&self) -> Option<&str>;
     fn get_bounds(&self) -> Option<f32>;
+    fn get_layer(&self, input: [f32; 4], window_size: [u32; 2]) -> bool;
 
     fn set_id(&mut self, id: u32);
     fn set_highlight(&mut self, a_value: f32);
@@ -72,6 +73,20 @@ impl Element for Panel {
         None
     }
 
+    fn get_layer(&self, input: [f32; 4], window_size: [u32; 2]) -> bool {
+        let position_self = [self.relative_position[0] * window_size[0] as f32, self.relative_position[1] * window_size[1] as f32];
+        let scale_self = [(self.relative_scale[0] * window_size[0] as f32) / 2.0, (self.relative_scale[1] * window_size[1] as f32) / 2.0];
+        let position_input = [input[0] * window_size[0] as f32, input[1] * window_size[1] as f32];
+        let scale_input = [(input[2] * window_size[0] as f32) / 2.0, (input[3] * window_size[1] as f32) / 2.0];
+        if position_self[0] - scale_self[0] > position_input[0] - scale_input[0]
+            || position_self[0] + scale_self[0] < position_input[0] + scale_input[0] 
+            || position_self[1] - scale_self[1] > position_input[1] - scale_input[1] 
+            || position_self[1] + scale_self[1] < position_input[1] + scale_input[1] {
+                return true;
+            }
+        return false;
+    }
+
     fn set_id(&mut self, id: u32) {
         self.id = id
     }
@@ -81,10 +96,23 @@ impl Element for Panel {
     }
 
     fn handle_click(&self) -> InteractionResult {
-        InteractionResult::None
+        if self.id == 0 {
+            println!("flag1");
+            return InteractionResult::Propogate(UiEvent::TitleBar)
+        } else {
+            println!("flag2");
+            InteractionResult::None
+        }
     }
 
-    fn is_cursor_within_bounds(&self, _cursor_position: [f32; 2], _element_pos: [f32; 2], _element_scale: [f32;2]) -> bool {
+    fn is_cursor_within_bounds(&self, cursor_position: [f32; 2], element_pos: [f32; 2], element_scale: [f32;2]) -> bool {
+        if cursor_position[0] <= element_pos[0] + (element_scale[0] / 2.0) 
+            && cursor_position[0] >= element_pos[0] - (element_scale[0] / 2.0)
+            && cursor_position[1] <= element_pos[1] + (element_scale[1] / 2.0) 
+            && cursor_position[1] >= element_pos[1] - (element_scale[1] / 2.0) 
+        {
+            return true;
+        }
         false
     }
 }
@@ -92,7 +120,8 @@ impl Element for Panel {
 pub enum UiEvent {
     CloseRequested,
     SetMinimized,
-    ResizeRequested
+    ResizeRequested,
+    TitleBar
 }
 pub enum InteractionResult {
     Success,
@@ -159,6 +188,20 @@ impl Element for Button {
 
     fn get_color(&self) -> [f32; 4] {
         self.color
+    }
+
+    fn get_layer(&self, input: [f32; 4], window_size: [u32; 2]) -> bool {
+        let position_self = [self.relative_position[0] * window_size[0] as f32, self.relative_position[1] * window_size[1] as f32];
+        let scale_self = [(self.relative_scale[0] * window_size[0] as f32) / 2.0, (self.relative_scale[1] * window_size[1] as f32) / 2.0];
+        let position_input = [input[0] * window_size[0] as f32, input[1] * window_size[1] as f32];
+        let scale_input = [(input[2] * window_size[0] as f32) / 2.0, (input[3] * window_size[1] as f32) / 2.0];
+        if position_self[0] - scale_self[0] > position_input[0] - scale_input[0]
+            || position_self[0] + scale_self[0] < position_input[0] + scale_input[0] 
+            || position_self[1] - scale_self[1] > position_input[1] - scale_input[1] 
+            || position_self[1] + scale_self[1] < position_input[1] + scale_input[1] {
+                return true;
+            }
+        return false;
     }
 
     fn set_id(&mut self, id: u32) {
@@ -265,6 +308,20 @@ impl Element for Label {
         self.relative_bounds
     }
 
+    fn get_layer(&self, input: [f32; 4], window_size: [u32; 2]) -> bool {
+        let position_self = [self.relative_position[0] * window_size[0] as f32, self.relative_position[1] * window_size[1] as f32];
+        let scale_self = [(self.relative_scale[0] * window_size[0] as f32) / 2.0, (self.relative_scale[1] * window_size[1] as f32) / 2.0];
+        let position_input = [input[0] * window_size[0] as f32, input[1] * window_size[1] as f32];
+        let scale_input = [(input[2] * window_size[0] as f32) / 2.0, (input[3] * window_size[1] as f32) / 2.0];
+        if position_self[0] - scale_self[0] > position_input[0] - scale_input[0]
+            || position_self[0] + scale_self[0] < position_input[0] + scale_input[0] 
+            || position_self[1] - scale_self[1] > position_input[1] - scale_input[1] 
+            || position_self[1] + scale_self[1] < position_input[1] + scale_input[1] {
+                return true;
+            }
+        return false;
+    }
+
     fn set_id(&mut self, id: u32) {
         self.id = id;
     }
@@ -327,6 +384,20 @@ impl Element for Icon {
 
     fn get_color(&self) -> [f32; 4] {
         self.color
+    }
+
+    fn get_layer(&self, input: [f32; 4], window_size: [u32; 2]) -> bool {
+        let position_self = [self.relative_position[0] * window_size[0] as f32, self.relative_position[1] * window_size[1] as f32];
+        let scale_self = [(self.relative_scale[0] * window_size[0] as f32) / 2.0, (self.relative_scale[1] * window_size[1] as f32) / 2.0];
+        let position_input = [input[0] * window_size[0] as f32, input[1] * window_size[1] as f32];
+        let scale_input = [(input[2] * window_size[0] as f32) / 2.0, (input[3] * window_size[1] as f32) / 2.0];
+        if position_self[0] - scale_self[0] > position_input[0] - scale_input[0]
+            || position_self[0] + scale_self[0] < position_input[0] + scale_input[0] 
+            || position_self[1] - scale_self[1] > position_input[1] - scale_input[1] 
+            || position_self[1] + scale_self[1] < position_input[1] + scale_input[1] {
+                return true;
+            }
+        return false;
     }
 
     fn set_id(&mut self, id: u32) {

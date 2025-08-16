@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use rendering::{definitions::UiAtlas, user_interface::{elements::{InteractionResult, UiEvent}, interface::Interface}, RenderState};
-use winit::{application::ApplicationHandler, dpi::PhysicalSize, event::{MouseButton, WindowEvent}, event_loop::EventLoop, window::Window};
+use winit::{application::ApplicationHandler, dpi::PhysicalSize, event::{ElementState, MouseButton, WindowEvent}, event_loop::EventLoop, keyboard::Key, platform::modifier_supplement::KeyEventExtModifierSupplement, window::Window};
 
 use crate::utils::{atlas_generation::generate_texture_atlas, components::header_componenet};
 
@@ -45,31 +45,41 @@ impl App {
     fn handle_click(&self, cursor_position: [f32; 2]) -> InteractionResult {
         let interface_guard = self.interface.lock().unwrap();
         let window_size = [self.window_size.width, self.window_size.height];
+        let mut result = InteractionResult::None;
+        let mut smallest_element = [0.5, 0.5, 1.0, 1.0];
 
         for element in &interface_guard.elements {
             let element_position = element.get_position(window_size);
             let element_scale = element.get_scale(window_size);
 
             if element.is_cursor_within_bounds(cursor_position, element_position, element_scale) {
-                return element.handle_click();
+                if element.get_layer(smallest_element, window_size) {
+                    smallest_element = [element_position[0], element_position[1], element_scale[0], element_scale[1]];
+                    result = element.handle_click();
+                }
             }
         }
-        return InteractionResult::None;
+        return result;
     }
 
     fn handle_hover(&self, cursor_position: [f32; 2]) -> Option<u32> {
         let interface_guard = self.interface.lock().unwrap();
         let window_size = [self.window_size.width, self.window_size.height];
+        let mut result = None;
+        let mut smallest_element = [0.5, 0.5, 1.0, 1.0];
 
         for element in &interface_guard.elements {
             let element_position = element.get_position(window_size);
             let element_scale = element.get_scale(window_size);
 
             if element.is_cursor_within_bounds(cursor_position, element_position, element_scale) {
-                return Some(element.get_id());
+                if element.get_layer(smallest_element, window_size) {
+                    smallest_element = [element_position[0], element_position[1], element_scale[0], element_scale[1]];
+                    result = Some(element.get_id());
+                }
             }
         }
-        return None;
+        return result;
     }
 
     fn highlight(&self, alpha: f32) {
@@ -185,10 +195,29 @@ impl ApplicationHandler for App {
                                 UiEvent::CloseRequested => event_loop.exit(),
                                 UiEvent::SetMinimized => window_ref.set_minimized(true),
                                 UiEvent::ResizeRequested => window_ref.set_maximized(!window_ref.is_maximized()),
+                                UiEvent::TitleBar => {
+                                    println!("HERE");
+                                    let _ = window_ref.drag_window();
+                                }
                                 //_ => unimplemented!()
                             }
                         },
                         InteractionResult::None => (),
+                    }
+                }
+            }
+
+            WindowEvent::KeyboardInput { event, .. } => {
+                if event.state == ElementState::Pressed {
+                    match event.key_without_modifiers() {
+                        // TODO: Implement match keys, try to figure out a better layer approach...
+                        Key::Named(named_key) => println!("named: {:?}", named_key),
+                        Key::Character(char) => match char.parse::<String>().unwrap().as_str() {
+                            "f" => {println!("F: {:#?}", self.cursor_position)}
+                            _ => ()
+                        },
+                        Key::Unidentified(native_key) => println!("native: {:?}", native_key),
+                        Key::Dead(_) => println!("DEAD"),
                     }
                 }
             }
