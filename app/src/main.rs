@@ -114,8 +114,6 @@ impl App {
             header_componenet(ui);
         });
 
-        //interface = list(interface);
-
         return interface;
     }
 }
@@ -126,7 +124,7 @@ impl ApplicationHandler for App {
         let window = Arc::new(event_loop.create_window(window_attributes).unwrap());
 
         let interface_arc = Arc::clone(&self.interface);
-
+        
         self.window_ref = Some(window.clone());
         self.render_state = Some(pollster::block_on(RenderState::new(window, interface_arc)).unwrap());
 

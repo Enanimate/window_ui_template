@@ -1,20 +1,74 @@
 use crate::definitions::GeometryType;
-
 pub trait Element {
+    /// Returns an elements id
     fn get_id(&self) -> u32;
+
+    /// Returns an elements GeometryType
+    /// This is used for instancing similar
+    /// geometries together to reduce load on
+    /// on the CPU.
     fn get_geometry_type(&self) -> GeometryType;
+
+    /// Returns the elements center-point relative
+    /// to the window size. An element at `[0.5, 0.5]`
+    /// would have a center point at half the window's 
+    /// height and half the window's width.
     fn get_position(&self, window_size: [u32; 2]) -> [f32; 2];
+
+    /// Returns the color the texture mask is
+    /// tinted by, for colord textures this
+    /// should typically be white with an alpha of 1.0.
     fn get_color(&self) -> [f32; 4];
+
+    /// Returns the scale applied to the element.
+    /// An element with a center-point at `[0.5, 0.5]`
+    /// and a scale of `[0.5, 0.5]` would have a width of
+    /// half the window's width and a height of 
+    /// half the window's height.
     fn get_scale(&self, window_size: [u32; 2]) -> [f32; 2];
+
+    /// Returns the name of the texture given to this element,
+    /// the name is directly related to the name of the equivalent
+    /// file stored in the assets file.
     fn get_texture_name(&self) -> Option<String>;
+
+    /// Returns an option, if called on a label element this
+    /// would be the text to be rendered.
     fn get_text(&self) -> Option<&str>;
+
+    /// Returns the bounds of an element, used for detecting
+    /// whether the user's mouse is within an element.
     fn get_bounds(&self) -> Option<f32>;
+
+    /// Returns whether the element this was called on 
+    /// has bounds within the input elements bounds.
     fn get_layer(&self, input: [f32; 4], window_size: [u32; 2]) -> bool;
 
+
+
+
+
+    /// Sets an elements id-number.
     fn set_id(&mut self, id: u32);
+
+    /// If an element can be highlighted this will set
+    /// the element's alpha transparency value.
     fn set_highlight(&mut self, a_value: f32);
 
+
+
+
+
+    /// Returns a custom result-type, if an element is
+    /// non-interactable this should return
+    /// InteractionResult::None, if an element is interactable
+    /// this can return one of two possible results.
+    /// Either Success which means that the interaction was accepted
+    /// and successful, or Propogate(UiEvent) which expects the calling function
+    /// to handle the returned UiEvent.
     fn handle_click(&self) -> InteractionResult;
+
+    /// Returns whether the cursor's position is within the elements bounds.
     fn is_cursor_within_bounds(&self, cursor_position: [f32; 2], element_pos: [f32; 2], element_scale: [f32;2]) -> bool;
 }
 
