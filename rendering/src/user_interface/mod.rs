@@ -1,4 +1,4 @@
-use crate::{definitions::{Color, ColorExt}, user_interface::{elements::{Button, Element, Icon, Label, Panel, UiEvent}, interface::Interface}};
+use crate::{definitions::{Color, ColorExt}, user_interface::{elements::{Button, Element, Icon, Label, Panel, TextBox, UiEvent}, interface::Interface}};
 
 pub mod interface;
 pub mod elements;
@@ -91,6 +91,18 @@ impl<'a> UserInterface<'a> {
     )
     {
         let element = Icon::new(relative_position, Color::from_hex(color).into_vec4(), relative_scale, texture_name);
+        self.interface.add_elements(element, None);
+    }
+
+    pub fn add_textbox(
+        &mut self, 
+        text: &str, 
+        relative_position: [f32; 2], 
+        relative_scale: [f32; 2], 
+        color: &str, 
+    ) 
+    {
+        let element = TextBox::new(text, relative_position, relative_scale, Color::from_hex(color).into_vec4());
         self.interface.add_elements(element, None);
     }
 }

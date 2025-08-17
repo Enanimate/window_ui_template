@@ -164,11 +164,9 @@ impl Interface {
 
     pub fn update_vertices(&mut self, queue: &Queue, device: &Device, window_size: [u32; 2]) {
         self.brush.as_ref().unwrap().resize_view(window_size[0] as f32, window_size[1] as f32, queue);
-        let mut sections: Vec<Section> = Vec::new();
 
         for (geometry_type, instances) in self.instances.iter() {
             let (vertices, indices) = Self::geometry_vertices(geometry_type);
-
             if let Some(vertex_buffer) = self.vertex_buffers.get(geometry_type) {
                 queue.write_buffer(vertex_buffer, 0, bytemuck::cast_slice(&vertices));
             }
@@ -178,29 +176,37 @@ impl Interface {
             if let Some(instance_buffer) = self.instance_buffers.get(geometry_type) {
                 queue.write_buffer(instance_buffer, 0, bytemuck::cast_slice(instances));
             }
+        }
 
-            if geometry_type == &GeometryType::Label {
-                for instance in instances {
-                    let label_element = self.elements.iter().find(|e| e.get_id() == instance.id).expect("Failed to find an element with and id matching the instance...");
-                    let text = label_element.get_text().expect("Label element contained no text...");
-                    let text_color = label_element.get_color();
-                    let bounds = label_element.get_bounds();
-
-                    let mut section = Section::builder()
-                        .with_screen_position(label_element.get_position(window_size))
-                        .with_text(vec![
-                            Text::new(text)
-                                .with_scale(30.0)
-                                .with_color(text_color)
-                        ]);
-
-                    if bounds.is_some() {
-                        section = section.with_bounds([bounds.unwrap(), 30.0]);
-                    }
-                    sections.push(section);
-                }
+        let mut label_data: Vec<(String, [f32; 4], Option<[f32; 2]>, [f32; 2])> = Vec::new();
+        for element in self.elements.iter_mut() {
+            if element.get_geometry_type() == GeometryType::Label {
+                let text_ref = element.get_text().expect("Label element contained no text...");
+                label_data.push((
+                    text_ref.to_string(),
+                    element.get_color(),
+                    element.get_bounds(),
+                    element.get_position(window_size)
+                ));
             }
         }
+
+        let mut sections: Vec<Section> = Vec::new();
+        for data in &label_data {
+            let mut section_builder = Section::builder()
+                .with_screen_position(data.3)
+                .with_text(vec![
+                    Text::new(&data.0) 
+                        .with_scale(30.0)
+                        .with_color(data.1)
+                ]);
+
+            if data.2.is_some() {
+                section_builder = section_builder.with_bounds(data.2.unwrap());
+            }
+            sections.push(section_builder);
+        }
+        
         if !sections.is_empty() {
             self.brush.as_mut().unwrap().queue(device, queue, sections).unwrap();
         }

@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 
-use rendering::{definitions::UiAtlas, user_interface::{elements::{InteractionResult, UiEvent}, interface::Interface}, RenderState};
-use winit::{application::ApplicationHandler, dpi::PhysicalSize, event::{ElementState, MouseButton, WindowEvent}, event_loop::EventLoop, keyboard::Key, platform::modifier_supplement::KeyEventExtModifierSupplement, window::Window};
+use rendering::{definitions::UiAtlas, user_interface::{elements::{ElementType, InteractionResult, UiEvent}, interface::Interface}, RenderState};
+use winit::{application::ApplicationHandler, dpi::PhysicalSize, event::{ElementState, MouseButton, WindowEvent}, event_loop::EventLoop, keyboard::{Key, NamedKey}, platform::modifier_supplement::KeyEventExtModifierSupplement, window::Window};
 
 use crate::utils::{atlas_generation::generate_texture_atlas, components::header_componenet};
 
@@ -18,9 +18,11 @@ struct App {
     interface: Arc<Mutex<Interface>>,
     window_size: PhysicalSize<u32>,
     cursor_position: [f32; 2],
+    selected_element: Option<u32>,
     hovered: Option<u32>,
     last_hovered: u32,
     atlas: UiAtlas,
+    text_buffer: String,
 }
 
 impl App {
@@ -31,9 +33,11 @@ impl App {
             interface: Arc::new(Mutex::new(Interface::new(atlas.clone()))),
             window_size: PhysicalSize::new(0, 0),
             cursor_position: [0.0, 0.0],
+            selected_element: None,
             hovered: None,
             last_hovered: 0,
             atlas,
+            text_buffer: String::new(),
         };
 
         env_logger::init();
@@ -112,6 +116,7 @@ impl App {
 
         interface.show(|ui| {
             header_componenet(ui);
+            ui.add_textbox("", [0.5, 0.5], [0.5, 0.5], "#ffffffff");
         });
 
         return interface;
@@ -185,6 +190,7 @@ impl ApplicationHandler for App {
             }
             WindowEvent::MouseInput { state, button, .. } => {
                 if button == MouseButton::Left && state.is_pressed() {
+                    self.selected_element = None;
                     let window_ref = self.window_ref.clone().unwrap();
                     match self.handle_click(self.cursor_position) {
                         InteractionResult::Success => (),
@@ -193,10 +199,10 @@ impl ApplicationHandler for App {
                                 UiEvent::CloseRequested => event_loop.exit(),
                                 UiEvent::SetMinimized => window_ref.set_minimized(true),
                                 UiEvent::ResizeRequested => window_ref.set_maximized(!window_ref.is_maximized()),
-                                UiEvent::TitleBar => {
-                                    println!("HERE");
-                                    let _ = window_ref.drag_window();
-                                }
+                                UiEvent::TitleBar => {let _ = window_ref.drag_window();}
+                                UiEvent::SetSelected(id) => {
+                                    println!("SetSelected: {}", id);
+                                    self.selected_element = Some(id)}
                                 //_ => unimplemented!()
                             }
                         },
@@ -208,11 +214,22 @@ impl ApplicationHandler for App {
             WindowEvent::KeyboardInput { event, .. } => {
                 if event.state == ElementState::Pressed {
                     match event.key_without_modifiers() {
-                        // TODO: Implement match keys, try to figure out a better layer approach...
-                        Key::Named(named_key) => println!("named: {:?}", named_key),
-                        Key::Character(char) => match char.parse::<String>().unwrap().as_str() {
-                            "f" => {println!("F: {:#?}", self.cursor_position)}
+                        Key::Named(named_key) => match named_key {
+                            NamedKey::Enter => {
+                                println!("{}", self.text_buffer)
+                            }
                             _ => ()
+                        }
+                        Key::Character(char) => {
+                            if let Some(selected) = self.selected_element {
+                                let mut interface_guard = self.interface.lock().unwrap();
+                                for element in &mut interface_guard.elements {
+                                    if element.get_id() == selected && element.get_element_type() == ElementType::TextBox{
+                                        element.set_text(&char);
+                                        needs_update = true;
+                                    }
+                                }
+                            }
                         },
                         Key::Unidentified(native_key) => println!("native: {:?}", native_key),
                         Key::Dead(_) => println!("DEAD"),
