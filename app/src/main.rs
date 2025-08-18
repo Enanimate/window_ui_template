@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use rendering::{definitions::UiAtlas, user_interface::{elements::{ElementType, InteractionResult, UiEvent}, interface::Interface}, RenderState};
-use winit::{application::ApplicationHandler, dpi::PhysicalSize, event::{ElementState, MouseButton, WindowEvent}, event_loop::EventLoop, keyboard::{Key, NamedKey}, platform::modifier_supplement::KeyEventExtModifierSupplement, window::Window};
+use winit::{application::ApplicationHandler, dpi::PhysicalSize, event::{ElementState, MouseButton, WindowEvent}, event_loop::{ControlFlow, EventLoop}, keyboard::{Key, NamedKey}, platform::modifier_supplement::KeyEventExtModifierSupplement, window::Window};
 
 use crate::utils::{atlas_generation::generate_texture_atlas, components::header_componenet};
 
@@ -18,7 +18,7 @@ struct App {
     interface: Arc<Mutex<Interface>>,
     window_size: PhysicalSize<u32>,
     cursor_position: [f32; 2],
-    selected_element: Option<u32>,
+    selected_element: Option<(u32, ElementType)>,
     hovered: Option<u32>,
     last_hovered: u32,
     atlas: UiAtlas,
@@ -86,14 +86,15 @@ impl App {
         return result;
     }
 
-    fn highlight(&self, alpha: f32) {
+    fn highlight(&self, alpha: f32) -> bool {
         let mut interface_guard = self.interface.lock().unwrap();
         
         for element in &mut interface_guard.elements {
             if element.get_id() == self.last_hovered {
-                element.set_highlight(alpha);
+                return element.set_highlight(alpha);
             }
         }
+        false
     }
 
     fn rebuild_interface(&mut self) {
@@ -103,7 +104,8 @@ impl App {
             let mut interface_guard = self.interface.lock().unwrap();
             *interface_guard = new_interface_data;
 
-            interface_guard.initialize_interface_buffers(&rs.device, &rs.queue, [self.window_size.width, self.window_size.height], &rs.config);
+            interface_guard.initalize_text_brush(&rs.device, &rs.config, &rs.queue);
+            interface_guard.initialize_interface_buffers(&rs.device, &rs.queue, [self.window_size.width, self.window_size.height]);
         } else {
             log::warn!("Attempted to rebuild interface but render_state was None. Cannot initialize GPU buffers.");
             let mut interface_guard = self.interface.lock().unwrap();
@@ -112,6 +114,7 @@ impl App {
     }
 
     fn build_project_view(atlas: UiAtlas) -> Interface {
+        println!("Building Project-View...");
         let mut interface = Interface::new(atlas);
 
         interface.show(|ui| {
@@ -125,6 +128,8 @@ impl App {
 
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
+        println!("Resuming...");
+        event_loop.set_control_flow(ControlFlow::Poll);
         let window_attributes = Window::default_attributes().with_maximized(true).with_decorations(false);
         let window = Arc::new(event_loop.create_window(window_attributes).unwrap());
 
@@ -134,11 +139,6 @@ impl ApplicationHandler for App {
         self.render_state = Some(pollster::block_on(RenderState::new(window, interface_arc)).unwrap());
 
         self.rebuild_interface();
-
-        if let Some(rs) = self.render_state.as_mut() {
-            let mut interface_guard = self.interface.lock().unwrap();
-            interface_guard.initialize_interface_buffers(&rs.device, &rs.queue, [self.window_size.width, self.window_size.height], &rs.config);
-        }
     }
 
     fn window_event(
@@ -150,7 +150,8 @@ impl ApplicationHandler for App {
         let current_window_size = self.window_ref.as_ref().unwrap().inner_size();
 
         let mut needs_rebuild = false;
-        let mut needs_update = true;
+        let mut needs_update = false;
+        let mut needs_text_update = false;
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
             WindowEvent::Resized(size) => {
@@ -178,14 +179,19 @@ impl ApplicationHandler for App {
                 self.hovered = self.handle_hover(self.cursor_position);
                 if let Some(hovered) = self.hovered {
                     if hovered != self.last_hovered {
-                        self.highlight(0.0);
+                        if self.highlight(0.0) {
+                            needs_update = true
+                        }
                         self.last_hovered = hovered;
                     } else {
-                        self.highlight(1.0);
-                        needs_update = true;
+                        if self.highlight(1.0) {
+                            needs_update = true
+                        }
                     }
                 } else {
-                    self.highlight(0.0);
+                    if self.highlight(0.0) {
+                        needs_update = true
+                    }
                 }
             }
             WindowEvent::MouseInput { state, button, .. } => {
@@ -200,10 +206,10 @@ impl ApplicationHandler for App {
                                 UiEvent::SetMinimized => window_ref.set_minimized(true),
                                 UiEvent::ResizeRequested => window_ref.set_maximized(!window_ref.is_maximized()),
                                 UiEvent::TitleBar => {let _ = window_ref.drag_window();}
-                                UiEvent::SetSelected(id) => {
+                                UiEvent::SetSelected(id, element_type) => {
                                     println!("SetSelected: {}", id);
-                                    self.selected_element = Some(id)}
-                                //_ => unimplemented!()
+                                    self.selected_element = Some((id, element_type))
+                                }
                             }
                         },
                         InteractionResult::None => (),
@@ -221,12 +227,12 @@ impl ApplicationHandler for App {
                             _ => ()
                         }
                         Key::Character(char) => {
-                            if let Some(selected) = self.selected_element {
+                            if let Some((selected_id, element_type)) = &self.selected_element {
                                 let mut interface_guard = self.interface.lock().unwrap();
                                 for element in &mut interface_guard.elements {
-                                    if element.get_id() == selected && element.get_element_type() == ElementType::TextBox{
+                                    if element.get_id() == *selected_id && *element_type == ElementType::TextBox{
                                         element.set_text(&char);
-                                        needs_update = true;
+                                        needs_text_update = true;
                                     }
                                 }
                             }
@@ -246,7 +252,14 @@ impl ApplicationHandler for App {
         if needs_update {
             if let Some(rs) = &self.render_state {
                 let mut interface_guard = self.interface.lock().unwrap();
-                interface_guard.initialize_interface_buffers(&rs.device, &rs.queue, [self.window_size.width, self.window_size.height], &rs.config);
+                interface_guard.initialize_interface_buffers(&rs.device, &rs.queue, [self.window_size.width, self.window_size.height]);
+            }
+        }
+
+        if needs_text_update || self.selected_element.is_some() && self.selected_element.as_ref().unwrap().1 == ElementType::TextBox {
+            if let Some(rs) = &self.render_state {
+                let mut interface_guard = self.interface.lock().unwrap();
+                interface_guard.update_text(&rs.device, &rs.queue, [self.window_size.width, self.window_size.height]);
             }
         }
 

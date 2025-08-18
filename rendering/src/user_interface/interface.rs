@@ -102,14 +102,25 @@ impl Interface {
         }
     }
 
-    pub fn initialize_interface_buffers(&mut self, device: &Device, queue: &Queue, window_size: [u32; 2], config: &wgpu::SurfaceConfiguration) {
-        let mut batched_instances: HashMap<GeometryType, Vec<InstanceRaw>> = HashMap::new();
+    pub fn initalize_text_brush(&mut self, device: &Device, config: &wgpu::SurfaceConfiguration, queue: &Queue) {
+        println!("Initializing text brush...");
         let font_bytes = include_bytes!("../../../ComicMono.ttf");
-        let atlas = &self.atlas;
-
         self.brush = Some(BrushBuilder::using_font_bytes(font_bytes)
             .unwrap()
             .build(device, config.width, config.height, config.format));
+
+        let mut section = Vec::new();
+        
+        section.push(Section::default()
+            .add_text(Text::new("abcdefghijklmnopqrstuvwyxz")));
+
+        self.brush.as_mut().unwrap().queue(device, queue, section).expect("uh oh");
+    }
+
+    pub fn initialize_interface_buffers(&mut self, device: &Device, queue: &Queue, window_size: [u32; 2]) { //config: &wgpu::SurfaceConfiguration) {
+        println!("Initializing interface buffers...");
+        let mut batched_instances: HashMap<GeometryType, Vec<InstanceRaw>> = HashMap::new();
+        let atlas = &self.atlas;
         
         for element in &self.elements {
             let atlas_entry = atlas.clone().get_entry_by_name(element.get_texture_name().unwrap_or("solid".to_string())).unwrap();
@@ -159,10 +170,12 @@ impl Interface {
         }
 
         self.instances = batched_instances;
-        self.update_vertices(queue, device, window_size);
+        self.update_vertices(queue, window_size);
+        self.update_text(device, queue, window_size);
     }
 
-    pub fn update_vertices(&mut self, queue: &Queue, device: &Device, window_size: [u32; 2]) {
+    pub fn update_vertices(&mut self, queue: &Queue, window_size: [u32; 2]) {
+        println!("Updating vertices...");
         self.brush.as_ref().unwrap().resize_view(window_size[0] as f32, window_size[1] as f32, queue);
 
         for (geometry_type, instances) in self.instances.iter() {
@@ -177,7 +190,10 @@ impl Interface {
                 queue.write_buffer(instance_buffer, 0, bytemuck::cast_slice(instances));
             }
         }
+    }
 
+    pub fn update_text(&mut self, device: &Device, queue: &Queue, window_size: [u32; 2]) {
+        println!("Updating displayed text...");
         let mut label_data: Vec<(String, [f32; 4], Option<[f32; 2]>, [f32; 2])> = Vec::new();
         for element in self.elements.iter_mut() {
             if element.get_geometry_type() == GeometryType::Label {

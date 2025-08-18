@@ -59,7 +59,7 @@ pub trait Element {
 
     /// If an element can be highlighted this will set
     /// the element's alpha transparency value.
-    fn set_highlight(&mut self, a_value: f32);
+    fn set_highlight(&mut self, a_value: f32) -> bool;
 
     fn set_text(&mut self, text: &str);
 
@@ -157,8 +157,8 @@ impl Element for Panel {
         self.id = id
     }
 
-    fn set_highlight(&mut self, _a_value: f32) {
-        ()
+    fn set_highlight(&mut self, _a_value: f32) -> bool {
+        false
     }
 
     fn set_text(&mut self, _text: &str) {
@@ -192,7 +192,7 @@ pub enum UiEvent {
     SetMinimized,
     ResizeRequested,
     TitleBar,
-    SetSelected(u32),
+    SetSelected(u32, ElementType),
 }
 pub enum InteractionResult {
     Success,
@@ -292,8 +292,9 @@ impl Element for Button {
         self.id = id;
     }
 
-    fn set_highlight(&mut self, a_value: f32) {
+    fn set_highlight(&mut self, a_value: f32) -> bool {
         self.color[3] = a_value;
+        true
     }
 
     fn set_text(&mut self, _text: &str) {
@@ -408,8 +409,8 @@ impl Element for Label {
         self.id = id;
     }
 
-    fn set_highlight(&mut self, _a_value: f32) {
-        ()
+    fn set_highlight(&mut self, _a_value: f32) -> bool {
+        false
     }
 
     fn set_text(&mut self, text: &str) {
@@ -494,8 +495,8 @@ impl Element for Icon {
         self.id = id;
     }
 
-    fn set_highlight(&mut self, _a_value: f32) {
-        ()
+    fn set_highlight(&mut self, _a_value: f32) -> bool {
+        false
     }
 
     fn set_text(&mut self, _text: &str) {
@@ -586,6 +587,12 @@ impl Element for TextBox {
     }
 
     fn get_text(&mut self) -> Option<&String> {
+        if self.is_cursor_visible {
+            self.final_text = format!("{}{}", self.text.clone(), "|");
+        } else {
+            self.final_text = self.text.clone();
+        }
+
         match self.timer.elapsed() {
             Ok(elapsed) => {
                 if elapsed >= self.blink_rate && !self.text.is_empty() {
@@ -593,10 +600,7 @@ impl Element for TextBox {
                     self.timer = SystemTime::now();
 
                     if self.is_cursor_visible {
-                        self.final_text = self.text.clone();
                         self.final_text.push_str("|");
-                    } else {
-                        self.final_text = self.text.clone()
                     }
                 }
             }
@@ -637,8 +641,8 @@ impl Element for TextBox {
         self.id = id;
     }
 
-    fn set_highlight(&mut self, _a_value: f32) {
-        ()
+    fn set_highlight(&mut self, _a_value: f32) -> bool {
+        false
     }
 
     fn set_text(&mut self, text: &str) {
@@ -647,7 +651,7 @@ impl Element for TextBox {
 
     fn handle_click(&self) -> InteractionResult {
         println!("Label Handle Click");
-        InteractionResult::Propogate(UiEvent::SetSelected(self.id))
+        InteractionResult::Propogate(UiEvent::SetSelected(self.id, self.get_element_type()))
     }
 
     fn is_cursor_within_bounds(&self, cursor_position: [f32; 2], element_pos: [f32; 2], element_scale: [f32;2]) -> bool {
