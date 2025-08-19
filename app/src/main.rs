@@ -22,7 +22,6 @@ struct App {
     hovered: Option<u32>,
     last_hovered: u32,
     atlas: UiAtlas,
-    text_buffer: String,
 }
 
 impl App {
@@ -37,7 +36,6 @@ impl App {
             hovered: None,
             last_hovered: 0,
             atlas,
-            text_buffer: String::new(),
         };
 
         env_logger::init();
@@ -47,12 +45,12 @@ impl App {
     }
 
     fn handle_click(&self, cursor_position: [f32; 2]) -> InteractionResult {
-        let interface_guard = self.interface.lock().unwrap();
+        let mut interface_guard = self.interface.lock().unwrap();
         let window_size = [self.window_size.width, self.window_size.height];
         let mut result = InteractionResult::None;
         let mut smallest_element = [0.5, 0.5, 1.0, 1.0];
 
-        for element in &interface_guard.elements {
+        for element in &mut interface_guard.elements {
             let element_position = element.get_position(window_size);
             let element_scale = element.get_scale(window_size);
 
@@ -67,12 +65,12 @@ impl App {
     }
 
     fn handle_hover(&self, cursor_position: [f32; 2]) -> Option<u32> {
-        let interface_guard = self.interface.lock().unwrap();
+        let mut interface_guard = self.interface.lock().unwrap();
         let window_size = [self.window_size.width, self.window_size.height];
         let mut result = None;
         let mut smallest_element = [0.5, 0.5, 1.0, 1.0];
 
-        for element in &interface_guard.elements {
+        for element in &mut interface_guard.elements {
             let element_position = element.get_position(window_size);
             let element_scale = element.get_scale(window_size);
 
@@ -119,7 +117,7 @@ impl App {
 
         interface.show(|ui| {
             header_componenet(ui);
-            ui.add_textbox("", [0.5, 0.5], [0.5, 0.5], "#ffffffff");
+            ui.add_textbox("placeholder", [0.5, 0.5], [0.5, 0.5], "#ffffffff");
         });
 
         return interface;
@@ -128,7 +126,6 @@ impl App {
 
 impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
-        println!("Resuming...");
         event_loop.set_control_flow(ControlFlow::Poll);
         let window_attributes = Window::default_attributes().with_maximized(true).with_decorations(false);
         let window = Arc::new(event_loop.create_window(window_attributes).unwrap());
@@ -207,7 +204,6 @@ impl ApplicationHandler for App {
                                 UiEvent::ResizeRequested => window_ref.set_maximized(!window_ref.is_maximized()),
                                 UiEvent::TitleBar => {let _ = window_ref.drag_window();}
                                 UiEvent::SetSelected(id, element_type) => {
-                                    println!("SetSelected: {}", id);
                                     self.selected_element = Some((id, element_type))
                                 }
                             }
@@ -221,8 +217,27 @@ impl ApplicationHandler for App {
                 if event.state == ElementState::Pressed {
                     match event.key_without_modifiers() {
                         Key::Named(named_key) => match named_key {
+                            NamedKey::Space => {
+                                if let Some((selected_id, element_type)) = &self.selected_element {
+                                    let mut interface_guard = self.interface.lock().unwrap();
+                                    for element in &mut interface_guard.elements {
+                                        if element.get_id() == *selected_id && *element_type == ElementType::TextBox{
+                                            element.set_text(" ", [self.window_size.width, self.window_size.height]);
+                                            needs_text_update = true;
+                                        }
+                                    }
+                                }
+                            }
                             NamedKey::Enter => {
-                                println!("{}", self.text_buffer)
+                                if let Some((selected_id, element_type)) = &self.selected_element {
+                                    let mut interface_guard = self.interface.lock().unwrap();
+                                    for element in &mut interface_guard.elements {
+                                        if element.get_id() == *selected_id && *element_type == ElementType::TextBox{
+                                            element.set_text("\n", [self.window_size.width, self.window_size.height]);
+                                            needs_text_update = true;
+                                        }
+                                    }
+                                }
                             }
                             _ => ()
                         }
@@ -231,7 +246,7 @@ impl ApplicationHandler for App {
                                 let mut interface_guard = self.interface.lock().unwrap();
                                 for element in &mut interface_guard.elements {
                                     if element.get_id() == *selected_id && *element_type == ElementType::TextBox{
-                                        element.set_text(&char);
+                                        element.set_text(&char, [self.window_size.width, self.window_size.height]);
                                         needs_text_update = true;
                                     }
                                 }

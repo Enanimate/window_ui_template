@@ -1,5 +1,7 @@
 use std::time::{Duration, SystemTime};
 
+use glam::f32;
+
 use crate::definitions::GeometryType;
 pub trait Element {
     /// Returns an elements id
@@ -15,7 +17,7 @@ pub trait Element {
     /// to the window size. An element at `[0.5, 0.5]`
     /// would have a center point at half the window's 
     /// height and half the window's width.
-    fn get_position(&self, window_size: [u32; 2]) -> [f32; 2];
+    fn get_position(&mut self, window_size: [u32; 2]) -> [f32; 2];
 
     /// Returns the color the texture mask is
     /// tinted by, for colord textures this
@@ -40,7 +42,7 @@ pub trait Element {
 
     /// Returns the bounds of an element, used for detecting
     /// whether the user's mouse is within an element.
-    fn get_bounds(&self) -> Option<[f32; 2]>;
+    fn get_bounds(&self, window_size: [u32; 2]) -> Option<[f32; 2]>;
 
     /// Returns whether the element this was called on 
     /// has bounds within the input elements bounds.
@@ -61,7 +63,7 @@ pub trait Element {
     /// the element's alpha transparency value.
     fn set_highlight(&mut self, a_value: f32) -> bool;
 
-    fn set_text(&mut self, text: &str);
+    fn set_text(&mut self, text: &str, window_size: [u32; 2]);
 
 
 
@@ -111,7 +113,7 @@ impl Element for Panel {
         self.geometry_type
     }
 
-    fn get_position(&self, window_size: [u32; 2]) -> [f32; 2] {
+    fn get_position(&mut self, window_size: [u32; 2]) -> [f32; 2] {
         [self.relative_position[0] * window_size[0] as f32, self.relative_position[1] * window_size[1] as f32]
     }
 
@@ -131,7 +133,7 @@ impl Element for Panel {
         None
     }
 
-    fn get_bounds(&self) -> Option<[f32; 2]> {
+    fn get_bounds(&self, _window_size: [u32; 2]) -> Option<[f32; 2]> {
         None
     }
 
@@ -161,16 +163,14 @@ impl Element for Panel {
         false
     }
 
-    fn set_text(&mut self, _text: &str) {
+    fn set_text(&mut self, _text: &str, _window_size: [u32; 2]) {
         unimplemented!()
     }
 
     fn handle_click(&self) -> InteractionResult {
         if self.id == 0 {
-            println!("flag1");
             return InteractionResult::Propogate(UiEvent::TitleBar)
         } else {
-            println!("flag2");
             InteractionResult::None
         }
     }
@@ -246,7 +246,7 @@ impl Button {
 }
 
 impl Element for Button {
-    fn get_bounds(&self) -> Option<[f32; 2]> {
+    fn get_bounds(&self, _window_size: [u32; 2]) -> Option<[f32; 2]> {
         None
     }
 
@@ -258,7 +258,7 @@ impl Element for Button {
         self.geometry_type
     }
 
-    fn get_position(&self, window_size: [u32; 2]) -> [f32; 2] {
+    fn get_position(&mut self, window_size: [u32; 2]) -> [f32; 2] {
         [self.relative_position[0] * window_size[0] as f32, self.relative_position[1] * window_size[1] as f32]
     }
 
@@ -297,7 +297,7 @@ impl Element for Button {
         true
     }
 
-    fn set_text(&mut self, _text: &str) {
+    fn set_text(&mut self, _text: &str, _window_size: [u32; 2]) {
         unimplemented!()
     }
 
@@ -356,8 +356,8 @@ impl Label {
         }
     }
 
-    pub fn with_bounds(mut self, relative_bounds: f32) -> Self {
-        self.relative_bounds = Some([relative_bounds, 30.0]);
+    pub fn with_bounds(mut self, relative_bounds: [f32; 2]) -> Self {
+        self.relative_bounds = Some([relative_bounds[0], relative_bounds[1]]);
         self
     }
 }
@@ -371,7 +371,7 @@ impl Element for Label {
         self.geometry_type
     }
 
-    fn get_position(&self, window_size: [u32; 2]) -> [f32; 2] {
+    fn get_position(&mut self, window_size: [u32; 2]) -> [f32; 2] {
         let text_length = (self.text.chars().count() as f32 * 15.0) / 2.0;
         let text_height = 30.0 / 2.0;
         [self.relative_position[0] * window_size[0] as f32 - text_length, self.relative_position[1] * window_size[1] as f32 - text_height]
@@ -393,8 +393,12 @@ impl Element for Label {
         Some(&self.text)
     }
 
-    fn get_bounds(&self) -> Option<[f32; 2]> {
-        self.relative_bounds
+    fn get_bounds(&self, window_size: [u32; 2]) -> Option<[f32; 2]> {
+        if let Some(bounds) = self.relative_bounds {
+            Some([bounds[0] * window_size[0] as f32, bounds[1] * window_size[1] as f32])
+        } else {
+            None
+        }
     }
 
     fn get_layer(&self, _input: [f32; 4], _window_size: [u32; 2]) -> bool {
@@ -413,7 +417,7 @@ impl Element for Label {
         false
     }
 
-    fn set_text(&mut self, text: &str) {
+    fn set_text(&mut self, text: &str, _window_size: [u32; 2]) {
         self.text.push_str(text);
     }
 
@@ -449,7 +453,7 @@ impl Icon {
 }
 
 impl Element for Icon {
-    fn get_bounds(&self) -> Option<[f32; 2]> {
+    fn get_bounds(&self, _window_size: [u32; 2]) -> Option<[f32; 2]> {
         None
     }
 
@@ -461,7 +465,7 @@ impl Element for Icon {
         self.geometry_type
     }
 
-    fn get_position(&self, window_size: [u32; 2]) -> [f32; 2] {
+    fn get_position(&mut self, window_size: [u32; 2]) -> [f32; 2] {
         [self.relative_position[0] * window_size[0] as f32, self.relative_position[1] * window_size[1] as f32]
     }
 
@@ -499,7 +503,7 @@ impl Element for Icon {
         false
     }
 
-    fn set_text(&mut self, _text: &str) {
+    fn set_text(&mut self, _text: &str, _window_size: [u32; 2]) {
         unimplemented!()
     }
 
@@ -536,12 +540,12 @@ pub struct TextBox {
 }
 
 impl TextBox {
-    pub fn new(text: &str, relative_position: [f32; 2], relative_scale: [f32; 2], color: [f32; 4]) -> Self {
+    pub fn new(placeholder_text: &str, relative_position: [f32; 2], relative_scale: [f32; 2], color: [f32; 4]) -> Self {
         Self {
             id: 0,
             geometry_type: GeometryType::Label,
-            text: text.to_string(),
-            placeholder: "Enter Text...".to_string(),
+            text: String::new(),
+            placeholder: placeholder_text.to_string(),
             final_text: String::new(),
             color,
             relative_position,
@@ -553,8 +557,8 @@ impl TextBox {
         }
     }
 
-    pub fn with_bounds(mut self, relative_bounds: f32) -> Self {
-        self.relative_bounds = Some([relative_bounds, 30.0]);
+    pub fn with_bounds(mut self, relative_bounds: [f32; 2]) -> Self {
+        self.relative_bounds = Some(relative_bounds);
         self
     }
 }
@@ -568,8 +572,8 @@ impl Element for TextBox {
         self.geometry_type
     }
 
-    fn get_position(&self, window_size: [u32; 2]) -> [f32; 2] {
-        let text_length = (self.text.chars().count() as f32 * 15.0) / 2.0;
+    fn get_position(&mut self, window_size: [u32; 2]) -> [f32; 2] {
+        let text_length = 0.0;
         let text_height = 30.0 / 2.0;
         [self.relative_position[0] * window_size[0] as f32 - text_length, self.relative_position[1] * window_size[1] as f32 - text_height]
     }
@@ -615,8 +619,12 @@ impl Element for TextBox {
         }
     }
 
-    fn get_bounds(&self) -> Option<[f32; 2]> {
-        self.relative_bounds
+    fn get_bounds(&self, window_size: [u32; 2]) -> Option<[f32; 2]> {
+        if let Some(relative_bounds) = self.relative_bounds {
+            Some([relative_bounds[0] * window_size[0] as f32, relative_bounds[1] * window_size[1] as f32])
+        } else {
+            self.relative_bounds
+        }
     }
 
     fn get_layer(&self, input: [f32; 4], window_size: [u32; 2]) -> bool {
@@ -645,8 +653,50 @@ impl Element for TextBox {
         false
     }
 
-    fn set_text(&mut self, text: &str) {
-        self.text.push_str(text);
+    fn set_text(&mut self, text: &str, window_size: [u32; 2]) {
+        /*
+        let mut text_string = text.to_string();
+
+        let bounds = self.get_bounds(window_size);
+        let mut insertion_indices = Vec::new();
+
+        for (index, _char) in self.text.char_indices() {
+            if let Some(bounds_inner) = bounds {
+                if index as f32 * 15.0 >= bounds_inner[0] {
+                    insertion_indices.push(index);
+                }
+            }
+        }
+
+        for i in insertion_indices.iter().rev() {
+            text_string.insert(*i, '\n');
+        }
+        */
+
+        let mut text_string = text.to_string();
+
+        let bounds = self.get_bounds(window_size);
+        let mut wrap = false;
+
+        let mut count = 1;
+        for char in self.text.chars() {
+            if let Some(bounds_inner) = bounds {
+                if char == '\n' {
+                    count = 0;
+                    wrap = false;
+                }
+                if (count + 1) as f32 * 15.0 >= bounds_inner[0] {
+                    wrap = true;
+                }
+            }
+            count += 1;
+        }
+
+        if wrap {
+            text_string = format!("\n{text_string}")
+        }
+
+        self.text.push_str(&text_string);
     }
 
     fn handle_click(&self) -> InteractionResult {

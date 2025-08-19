@@ -117,12 +117,12 @@ impl Interface {
         self.brush.as_mut().unwrap().queue(device, queue, section).expect("uh oh");
     }
 
-    pub fn initialize_interface_buffers(&mut self, device: &Device, queue: &Queue, window_size: [u32; 2]) { //config: &wgpu::SurfaceConfiguration) {
+    pub fn initialize_interface_buffers(&mut self, device: &Device, queue: &Queue, window_size: [u32; 2]) {
         println!("Initializing interface buffers...");
         let mut batched_instances: HashMap<GeometryType, Vec<InstanceRaw>> = HashMap::new();
         let atlas = &self.atlas;
         
-        for element in &self.elements {
+        for element in &mut self.elements {
             let atlas_entry = atlas.clone().get_entry_by_name(element.get_texture_name().unwrap_or("solid".to_string())).unwrap();
             let tex_coords = [
                 atlas_entry.start_coord.unwrap().0,
@@ -175,7 +175,6 @@ impl Interface {
     }
 
     pub fn update_vertices(&mut self, queue: &Queue, window_size: [u32; 2]) {
-        println!("Updating vertices...");
         self.brush.as_ref().unwrap().resize_view(window_size[0] as f32, window_size[1] as f32, queue);
 
         for (geometry_type, instances) in self.instances.iter() {
@@ -193,7 +192,6 @@ impl Interface {
     }
 
     pub fn update_text(&mut self, device: &Device, queue: &Queue, window_size: [u32; 2]) {
-        println!("Updating displayed text...");
         let mut label_data: Vec<(String, [f32; 4], Option<[f32; 2]>, [f32; 2])> = Vec::new();
         for element in self.elements.iter_mut() {
             if element.get_geometry_type() == GeometryType::Label {
@@ -201,7 +199,7 @@ impl Interface {
                 label_data.push((
                     text_ref.to_string(),
                     element.get_color(),
-                    element.get_bounds(),
+                    element.get_bounds(window_size),
                     element.get_position(window_size)
                 ));
             }

@@ -102,7 +102,7 @@ impl<'a> UserInterface<'a> {
         color: &str, 
     ) 
     {
-        let element = TextBox::new(text, relative_position, relative_scale, Color::from_hex(color).into_vec4());
+        let element = TextBox::new(text, relative_position, relative_scale, Color::from_hex(color).into_vec4()).with_bounds([0.05, 0.25]);
         self.interface.add_elements(element, None);
     }
 }
