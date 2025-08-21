@@ -1,9 +1,9 @@
 use std::sync::{Arc, Mutex};
 
 use rendering::{definitions::UiAtlas, user_interface::{elements::{ElementType, InteractionResult, UiEvent}, interface::Interface}, RenderState};
-use winit::{application::ApplicationHandler, dpi::PhysicalSize, event::{ElementState, MouseButton, WindowEvent}, event_loop::{ControlFlow, EventLoop}, keyboard::{Key, NamedKey}, platform::modifier_supplement::KeyEventExtModifierSupplement, window::Window};
+use winit::{application::ApplicationHandler, dpi::{PhysicalPosition, PhysicalSize}, event::{ElementState, MouseButton, WindowEvent}, event_loop::{ControlFlow, EventLoop}, keyboard::{Key, NamedKey}, platform::modifier_supplement::KeyEventExtModifierSupplement, window::{CursorIcon, Window}};
 
-use crate::utils::{atlas_generation::generate_texture_atlas, components::header_componenet};
+use crate::utils::{atlas_generation::generate_texture_atlas, components::header_componenet, definitions::Edge};
 
 mod utils;
 
@@ -22,6 +22,7 @@ struct App {
     hovered: Option<u32>,
     last_hovered: u32,
     atlas: UiAtlas,
+    resizing: bool,
 }
 
 impl App {
@@ -36,6 +37,7 @@ impl App {
             hovered: None,
             last_hovered: 0,
             atlas,
+            resizing: false,
         };
 
         env_logger::init();
@@ -84,6 +86,30 @@ impl App {
         return result;
     }
 
+    fn handle_resizing(&self, cursor_position: [f32; 2], window_size: [f32; 2]) -> Edge {
+        let mut resize_event_area = 2.0;
+        if self.resizing {
+            resize_event_area = 50.0;
+        }
+
+        let is_on_left_edge = cursor_position[0] <= resize_event_area;
+        let is_on_right_edge = cursor_position[0] >= window_size[0] - resize_event_area;
+        let is_on_bottom_edge = cursor_position[1] >= window_size[1] - resize_event_area;
+
+        let (cursor_icon, side) = match (is_on_left_edge, is_on_right_edge, is_on_bottom_edge) {
+            (true, false, false) => (CursorIcon::WResize, Edge::Left),
+            (false, true, false) => (CursorIcon::EResize, Edge::Right),
+            (false, false, true) => (CursorIcon::SResize, Edge::Bottom),
+
+            (true, false, true) => (CursorIcon::SwResize, Edge::BottomLeft),
+            (false, true, true) => (CursorIcon::SeResize, Edge::BottomRight), 
+            _ => (CursorIcon::default(), Edge::None)
+        };
+
+        self.window_ref.clone().unwrap().set_cursor(cursor_icon);
+        return side;
+    }
+
     fn highlight(&self, alpha: f32) -> bool {
         let mut interface_guard = self.interface.lock().unwrap();
         
@@ -115,6 +141,8 @@ impl App {
         println!("Building Project-View...");
         let mut interface = Interface::new(atlas);
 
+        // TODO: Implement manual window sizing. Should be straight forward, similar to panel with id: 0.
+
         interface.show(|ui| {
             header_componenet(ui);
             ui.add_textbox("placeholder", [0.5, 0.5], [0.5, 0.5], "#ffffffff");
@@ -133,7 +161,7 @@ impl ApplicationHandler for App {
         let interface_arc = Arc::clone(&self.interface);
         
         self.window_ref = Some(window.clone());
-        self.render_state = Some(pollster::block_on(RenderState::new(window, interface_arc)).unwrap());
+        self.render_state = Some(pollster::block_on(RenderState::new(window.clone(), interface_arc)).unwrap());
 
         self.rebuild_interface();
     }
@@ -149,9 +177,11 @@ impl ApplicationHandler for App {
         let mut needs_rebuild = false;
         let mut needs_update = false;
         let mut needs_text_update = false;
+
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
             WindowEvent::Resized(size) => {
+                println!("RESIZE");
                 self.window_size = size;
                 needs_rebuild = true;
                 if let Some(rs) = self.render_state.as_mut() {
@@ -171,7 +201,79 @@ impl ApplicationHandler for App {
                     }
                 }
             }
+
+            WindowEvent::MouseInput { state, button, .. } => {
+                if button == MouseButton::Left && state.is_pressed() {
+                    self.selected_element = None;
+                    let window_ref = self.window_ref.clone().unwrap();
+                    if self.handle_resizing( self.cursor_position, [current_window_size.width as f32, current_window_size.height as f32]) != Edge::None {
+                        self.resizing = true;
+                    }
+                    match self.handle_click(self.cursor_position) {
+                        InteractionResult::Success => (),
+                        InteractionResult::Propogate(ui_event) => {
+                            match ui_event {
+                                UiEvent::CloseRequested => event_loop.exit(),
+                                UiEvent::SetMinimized => window_ref.set_minimized(true),
+                                UiEvent::ResizeRequested => window_ref.set_maximized(!window_ref.is_maximized()),
+                                UiEvent::TitleBar => {let _ = window_ref.drag_window();}
+                                UiEvent::SetSelected(id, element_type) => {
+                                    self.selected_element = Some((id, element_type))
+                                }
+                            }
+                        },
+                        InteractionResult::None => (),
+                    }
+                } else if button == MouseButton::Left && !state.is_pressed() {
+                    if self.resizing {
+                        self.resizing = false;
+                    }
+                }
+            }
+
             WindowEvent::CursorMoved { position, .. } => {
+                let side = self.handle_resizing( self.cursor_position, [current_window_size.width as f32, current_window_size.height as f32]);
+                if self.resizing {
+                    let delta_x = position.x as f32 - self.cursor_position[0];
+                    let delta_y = position.y as f32 - self.cursor_position[1];
+
+                    let window = self.window_ref.clone().unwrap();
+
+                    let current_position = window.outer_position().unwrap_or_default();
+
+                    let (mut new_width, mut new_height) = (current_window_size.width as f32, current_window_size.height as f32);
+                    let mut new_position_x = current_position.x;
+
+                    println!("{:?}", side);
+
+                    match side {
+                        Edge::None => (),
+
+                        Edge::Left => {
+                            new_width = (current_window_size.width as f32 - delta_x).max(100.0);
+                            new_position_x = (current_position.x as f32 + delta_x) as i32;
+                        },
+
+                        Edge::Right => new_width = (current_window_size.width as f32 + delta_x).max(100.0),
+                        Edge::Bottom => new_height = (current_window_size.height as f32 + delta_y).max(100.0),
+                        Edge::BottomLeft => {
+                            new_width = (current_window_size.width as f32 - delta_x).max(100.0);
+                            new_height = (current_window_size.height as f32 + delta_y).max(100.0);
+
+                            new_position_x = (current_position.x as f32 + delta_x) as i32;
+                        },
+                        Edge::BottomRight => {
+                            new_width = (current_window_size.width as f32 + delta_x).max(100.0);
+                            new_height = (current_window_size.height as f32 + delta_y).max(100.0);
+                        },
+                    }
+
+                    window.set_outer_position(PhysicalPosition::new(new_position_x, current_position.y));
+                    let _ = window.request_inner_size(PhysicalSize::new(new_width as u32, new_height as u32));
+                    window.request_redraw();
+                }
+
+                
                 self.cursor_position = [position.x as f32, position.y as f32];
                 self.hovered = self.handle_hover(self.cursor_position);
                 if let Some(hovered) = self.hovered {
@@ -188,27 +290,6 @@ impl ApplicationHandler for App {
                 } else {
                     if self.highlight(0.0) {
                         needs_update = true
-                    }
-                }
-            }
-            WindowEvent::MouseInput { state, button, .. } => {
-                if button == MouseButton::Left && state.is_pressed() {
-                    self.selected_element = None;
-                    let window_ref = self.window_ref.clone().unwrap();
-                    match self.handle_click(self.cursor_position) {
-                        InteractionResult::Success => (),
-                        InteractionResult::Propogate(ui_event) => {
-                            match ui_event {
-                                UiEvent::CloseRequested => event_loop.exit(),
-                                UiEvent::SetMinimized => window_ref.set_minimized(true),
-                                UiEvent::ResizeRequested => window_ref.set_maximized(!window_ref.is_maximized()),
-                                UiEvent::TitleBar => {let _ = window_ref.drag_window();}
-                                UiEvent::SetSelected(id, element_type) => {
-                                    self.selected_element = Some((id, element_type))
-                                }
-                            }
-                        },
-                        InteractionResult::None => (),
                     }
                 }
             }

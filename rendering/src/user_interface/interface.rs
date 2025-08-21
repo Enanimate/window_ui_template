@@ -103,7 +103,6 @@ impl Interface {
     }
 
     pub fn initalize_text_brush(&mut self, device: &Device, config: &wgpu::SurfaceConfiguration, queue: &Queue) {
-        println!("Initializing text brush...");
         let font_bytes = include_bytes!("../../../ComicMono.ttf");
         self.brush = Some(BrushBuilder::using_font_bytes(font_bytes)
             .unwrap()
@@ -118,7 +117,6 @@ impl Interface {
     }
 
     pub fn initialize_interface_buffers(&mut self, device: &Device, queue: &Queue, window_size: [u32; 2]) {
-        println!("Initializing interface buffers...");
         let mut batched_instances: HashMap<GeometryType, Vec<InstanceRaw>> = HashMap::new();
         let atlas = &self.atlas;
         
