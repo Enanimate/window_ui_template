@@ -152,7 +152,7 @@ impl Element for Panel {
     }
 
     fn get_element_type(&self) -> ElementType {
-        ElementType::Panel
+        ElementType::Panel(self.id)
     }
 
     fn set_id(&mut self, id: u32) {
@@ -202,11 +202,11 @@ pub enum InteractionResult {
 
 #[derive(PartialEq)]
 pub enum ElementType {
-    Panel,
-    Button,
-    Label,
-    Icon,
-    TextBox
+    Panel(u32),
+    Button(u32),
+    Label(u32),
+    Icon(u32),
+    TextBox(u32)
 }
 
 pub struct Button {
@@ -285,7 +285,7 @@ impl Element for Button {
     }
 
     fn get_element_type(&self) -> ElementType {
-        ElementType::Button
+        ElementType::Button(self.id)
     }
 
     fn set_id(&mut self, id: u32) {
@@ -406,7 +406,7 @@ impl Element for Label {
     }
 
     fn get_element_type(&self) -> ElementType {
-        ElementType::Label
+        ElementType::Label(self.id)
     }
 
     fn set_id(&mut self, id: u32) {
@@ -492,7 +492,7 @@ impl Element for Icon {
     }
 
     fn get_element_type(&self) -> ElementType {
-        ElementType::Icon
+        ElementType::Icon(self.id)
     }
 
     fn set_id(&mut self, id: u32) {
@@ -642,7 +642,7 @@ impl Element for TextBox {
     }
 
     fn get_element_type(&self) -> ElementType {
-        ElementType::TextBox
+        ElementType::TextBox(self.id)
     }
 
     fn set_id(&mut self, id: u32) {
