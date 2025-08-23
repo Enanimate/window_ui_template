@@ -1,18 +1,19 @@
 use std::sync::{Arc, Mutex};
 
 use rendering::{definitions::UiAtlas, user_interface::{elements::{ElementType, InteractionResult, UiEvent}, interface::Interface}, RenderState};
+#[allow(unused_imports)]
 use winit::{application::ApplicationHandler, dpi::{PhysicalPosition, PhysicalSize}, event::{ElementState, MouseButton, WindowEvent}, event_loop::{ControlFlow, EventLoop}, keyboard::{Key, NamedKey}, platform::modifier_supplement::KeyEventExtModifierSupplement, window::{CursorIcon, Window}};
 
-use crate::utils::{atlas_generation::generate_texture_atlas, components::header_componenet, definitions::Edge};
+use crate::utils::{atlas_generation::generate_texture_atlas, components::header_componenet, core::AppLogic, definitions::{AppWindow, Edge}};
 
 mod utils;
 
 fn main() {
     let atlas = generate_texture_atlas();
-    App::new(atlas);
+    App::<winit::window::Window>::new(atlas);
 }
 
-struct App {
+struct App<W: AppWindow> {
     render_state: Option<RenderState>,
     window_ref: Option<Arc<Window>>,
     interface: Arc<Mutex<Interface>>,
@@ -23,9 +24,10 @@ struct App {
     last_hovered: u32,
     atlas: UiAtlas,
     resizing: bool,
+    logic: AppLogic<W>
 }
 
-impl App {
+impl<W: AppWindow> App<W> {
     fn new(atlas: UiAtlas) {
         let mut app = Self {
             render_state: None,
@@ -38,12 +40,17 @@ impl App {
             last_hovered: 0,
             atlas,
             resizing: false,
+            logic: AppLogic::new(None)
         };
 
         env_logger::init();
         
         let event_loop = EventLoop::new().unwrap();
         event_loop.run_app(&mut app).unwrap();
+    }
+
+    fn update_logic(&mut self) {
+        self.logic.window = self.window_ref
     }
 
     fn handle_click(&self, cursor_position: [f32; 2]) -> InteractionResult {
@@ -84,30 +91,6 @@ impl App {
             }
         }
         return result;
-    }
-
-    fn handle_resizing(&self, cursor_position: [f32; 2], window_size: [f32; 2]) -> Edge {
-        let mut resize_event_area = 2.0;
-        if self.resizing {
-            resize_event_area = 50.0;
-        }
-
-        let is_on_left_edge = cursor_position[0] <= resize_event_area;
-        let is_on_right_edge = cursor_position[0] >= window_size[0] - resize_event_area;
-        let is_on_bottom_edge = cursor_position[1] >= window_size[1] - resize_event_area;
-
-        let (cursor_icon, side) = match (is_on_left_edge, is_on_right_edge, is_on_bottom_edge) {
-            (true, false, false) => (CursorIcon::WResize, Edge::Left),
-            (false, true, false) => (CursorIcon::EResize, Edge::Right),
-            (false, false, true) => (CursorIcon::SResize, Edge::Bottom),
-
-            (true, false, true) => (CursorIcon::SwResize, Edge::BottomLeft),
-            (false, true, true) => (CursorIcon::SeResize, Edge::BottomRight), 
-            _ => (CursorIcon::default(), Edge::None)
-        };
-
-        self.window_ref.clone().unwrap().set_cursor(cursor_icon);
-        return side;
     }
 
     fn highlight(&self, alpha: f32) -> bool {
@@ -152,7 +135,7 @@ impl App {
     }
 }
 
-impl ApplicationHandler for App {
+impl<W: AppWindow> ApplicationHandler for App<W> {
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
         event_loop.set_control_flow(ControlFlow::Poll);
         let window_attributes = Window::default_attributes().with_maximized(true).with_decorations(false);
@@ -206,7 +189,7 @@ impl ApplicationHandler for App {
                 if button == MouseButton::Left && state.is_pressed() {
                     self.selected_element = None;
                     let window_ref = self.window_ref.clone().unwrap();
-                    if self.handle_resizing( self.cursor_position, [current_window_size.width as f32, current_window_size.height as f32]) != Edge::None {
+                    if self.logic.handle_resizing( self.cursor_position, [current_window_size.width as f32, current_window_size.height as f32]) != Edge::None {
                         self.resizing = true;
                     }
                     match self.handle_click(self.cursor_position) {
@@ -232,7 +215,7 @@ impl ApplicationHandler for App {
             }
 
             WindowEvent::CursorMoved { position, .. } => {
-                let side = self.handle_resizing( self.cursor_position, [current_window_size.width as f32, current_window_size.height as f32]);
+                let side = self.logic.handle_resizing( self.cursor_position, [current_window_size.width as f32, current_window_size.height as f32]);
                 if self.resizing {
                     let delta_x = position.x as f32 - self.cursor_position[0];
                     let delta_y = position.y as f32 - self.cursor_position[1];
@@ -374,17 +357,11 @@ mod tests {
         pub cursor_icon: CursorIcon,
     }
 
-    impl MockWindow {
-        fn new() -> Self {
-            MockWindow { cursor_icon: CursorIcon::Default }
-        }
-
-        fn set_cursor(&mut self, cursor: CursorIcon) {
-            self.cursor_icon = cursor;
+    impl AppWindow for MockWindow {
+        fn set_cursor(&self, _cursor: CursorIcon) {
+            ()
         }
     }
-
-    type MockWindowRef = Option<Arc<Mutex<MockWindow>>>;
 
     #[test]
     fn it_works() {
@@ -405,9 +382,10 @@ mod tests {
             last_hovered: 0,
             atlas: atlas,
             resizing: false,
+            logic: AppLogic::<MockWindow>::new(mock_window_ref)
         };
 
-        let result = App::handle_resizing(&app, [cursor_position.x as f32, cursor_position.y as f32], [window_size.width as f32, window_size.height as f32]);
+        let result = AppLogic::handle_resizing(&app.logic, [cursor_position.x as f32, cursor_position.y as f32], [window_size.width as f32, window_size.height as f32]);
 
         println!("{result:?}");
         assert_eq!(result, Edge::Right)
