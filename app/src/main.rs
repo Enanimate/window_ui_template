@@ -364,3 +364,52 @@ impl ApplicationHandler for App {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[derive(Debug, PartialEq, Clone)]
+    struct MockWindow {
+        pub cursor_icon: CursorIcon,
+    }
+
+    impl MockWindow {
+        fn new() -> Self {
+            MockWindow { cursor_icon: CursorIcon::Default }
+        }
+
+        fn set_cursor(&mut self, cursor: CursorIcon) {
+            self.cursor_icon = cursor;
+        }
+    }
+
+    type MockWindowRef = Option<Arc<Mutex<MockWindow>>>;
+
+    #[test]
+    fn it_works() {
+        let mock_window = Arc::new(MockWindow { cursor_icon: CursorIcon::Default });
+        let mock_window_ref = Some(mock_window);
+        let window_size = PhysicalSize::new(1000, 1000);
+        let cursor_position = PhysicalPosition::new(window_size.width, window_size.height / 2);
+
+        let atlas = UiAtlas::new(0, 0);
+        let app = App {
+            render_state: None,
+            window_ref: None,
+            interface: Arc::new(Mutex::new(Interface::new(atlas.clone()))),
+            window_size,
+            cursor_position: [cursor_position.x as f32, cursor_position.y as f32],
+            selected_element: None,
+            hovered: None,
+            last_hovered: 0,
+            atlas: atlas,
+            resizing: false,
+        };
+
+        let result = App::handle_resizing(&app, [cursor_position.x as f32, cursor_position.y as f32], [window_size.width as f32, window_size.height as f32]);
+
+        println!("{result:?}");
+        assert_eq!(result, Edge::Right)
+    }
+}
