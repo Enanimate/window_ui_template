@@ -3,3 +3,4 @@ pub mod components;
 pub mod macros;
 pub mod definitions;
 pub mod core;
+mod tests;

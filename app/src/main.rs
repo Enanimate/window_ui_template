@@ -4,133 +4,39 @@ use rendering::{definitions::UiAtlas, user_interface::{elements::{ElementType, I
 #[allow(unused_imports)]
 use winit::{application::ApplicationHandler, dpi::{PhysicalPosition, PhysicalSize}, event::{ElementState, MouseButton, WindowEvent}, event_loop::{ControlFlow, EventLoop}, keyboard::{Key, NamedKey}, platform::modifier_supplement::KeyEventExtModifierSupplement, window::{CursorIcon, Window}};
 
-use crate::utils::{atlas_generation::generate_texture_atlas, components::header_componenet, core::AppLogic, definitions::Edge};
+use crate::utils::{atlas_generation::generate_texture_atlas, core::{AppLogic, AppState}, definitions::Edge};
 
 mod utils;
 
 fn main() {
     let atlas = generate_texture_atlas();
     let mut app = App::new(atlas);
+
     env_logger::init();
+
     let event_loop = EventLoop::new().unwrap();
     event_loop.run_app(&mut app).unwrap();
 }
 
 struct App {
-    render_state: Option<RenderState>,
+    //render_state: Option<RenderState>,
     window_ref: Option<Arc<Window>>,
-    interface: Arc<Mutex<Interface>>,
     window_size: PhysicalSize<u32>,
     cursor_position: [f32; 2],
     selected_element: Option<(u32, ElementType)>,
-    hovered: Option<u32>,
-    last_hovered: u32,
-    atlas: UiAtlas,
-    resizing: bool,
     logic: AppLogic<Window>
 }
 
 impl App {
     fn new(atlas: UiAtlas) -> Self {
         Self {
-            render_state: None,
+            //render_state: None,
             window_ref: None,
-            interface: Arc::new(Mutex::new(Interface::new(atlas.clone()))),
             window_size: PhysicalSize::new(0, 0),
             cursor_position: [0.0, 0.0],
             selected_element: None,
-            hovered: None,
-            last_hovered: 0,
-            atlas,
-            resizing: false,
-            logic: AppLogic::new(None)
+            logic: AppLogic::new(None, Arc::new(Mutex::new(Interface::new(atlas.clone()))), atlas)
         }
-
-        //env_logger::init();
-        
-        //let event_loop = EventLoop::new().unwrap();
-        //event_loop.run_app(&mut app).unwrap();
-    }
-
-    fn handle_click(&self, cursor_position: [f32; 2]) -> InteractionResult {
-        let mut interface_guard = self.interface.lock().unwrap();
-        let window_size = [self.window_size.width, self.window_size.height];
-        let mut result = InteractionResult::None;
-        let mut smallest_element = [0.5, 0.5, 1.0, 1.0];
-
-        for element in &mut interface_guard.elements {
-            let element_position = element.get_position(window_size);
-            let element_scale = element.get_scale(window_size);
-
-            if element.is_cursor_within_bounds(cursor_position, element_position, element_scale) {
-                if element.get_layer(smallest_element, window_size) {
-                    smallest_element = [element_position[0], element_position[1], element_scale[0], element_scale[1]];
-                    result = element.handle_click();
-                }
-            }
-        }
-        return result;
-    }
-
-    fn handle_hover(&self, cursor_position: [f32; 2]) -> Option<u32> {
-        let mut interface_guard = self.interface.lock().unwrap();
-        let window_size = [self.window_size.width, self.window_size.height];
-        let mut result = None;
-        let mut smallest_element = [0.5, 0.5, 1.0, 1.0];
-
-        for element in &mut interface_guard.elements {
-            let element_position = element.get_position(window_size);
-            let element_scale = element.get_scale(window_size);
-
-            if element.is_cursor_within_bounds(cursor_position, element_position, element_scale) {
-                if element.get_layer(smallest_element, window_size) {
-                    smallest_element = [element_position[0], element_position[1], element_scale[0], element_scale[1]];
-                    result = Some(element.get_id());
-                }
-            }
-        }
-        return result;
-    }
-
-    fn highlight(&self, alpha: f32) -> bool {
-        let mut interface_guard = self.interface.lock().unwrap();
-        
-        for element in &mut interface_guard.elements {
-            if element.get_id() == self.last_hovered {
-                return element.set_highlight(alpha);
-            }
-        }
-        false
-    }
-
-    fn rebuild_interface(&mut self) {
-        let new_interface_data = Self::build_project_view(self.atlas.clone());
-
-        if let Some(rs) = self.render_state.as_mut() {
-            let mut interface_guard = self.interface.lock().unwrap();
-            *interface_guard = new_interface_data;
-
-            interface_guard.initalize_text_brush(&rs.device, &rs.config, &rs.queue);
-            interface_guard.initialize_interface_buffers(&rs.device, &rs.queue, [self.window_size.width, self.window_size.height]);
-        } else {
-            log::warn!("Attempted to rebuild interface but render_state was None. Cannot initialize GPU buffers.");
-            let mut interface_guard = self.interface.lock().unwrap();
-            *interface_guard = new_interface_data;
-        }
-    }
-
-    fn build_project_view(atlas: UiAtlas) -> Interface {
-        println!("Building Project-View...");
-        let mut interface = Interface::new(atlas);
-
-        // TODO: Implement manual window sizing. Should be straight forward, similar to panel with id: 0.
-
-        interface.show(|ui| {
-            header_componenet(ui);
-            ui.add_textbox("placeholder", [0.5, 0.5], [0.5, 0.5], "#ffffffff");
-        });
-
-        return interface;
     }
 }
 
@@ -140,12 +46,13 @@ impl ApplicationHandler for App {
         let window_attributes = Window::default_attributes().with_maximized(true).with_decorations(false);
         let window = Arc::new(event_loop.create_window(window_attributes).unwrap());
 
-        let interface_arc = Arc::clone(&self.interface);
+        let interface_arc = Arc::clone(&self.logic.interface);
         
         self.window_ref = Some(window.clone());
-        self.render_state = Some(pollster::block_on(RenderState::new(window.clone(), interface_arc)).unwrap());
+        self.logic.window = Some(window.clone());
+        self.logic.render_state = Some(pollster::block_on(RenderState::new(window.clone(), interface_arc)).unwrap());
 
-        self.rebuild_interface();
+        self.logic.rebuild_interface();
     }
 
     fn window_event(
@@ -160,24 +67,18 @@ impl ApplicationHandler for App {
         let mut needs_update = false;
         let mut needs_text_update = false;
 
-        if self.window_ref.is_none() {
-            println!("returned");
-            return;
-        }
-        println!("Not returned");
-
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
             WindowEvent::Resized(size) => {
                 println!("RESIZE");
                 self.window_size = size;
                 needs_rebuild = true;
-                if let Some(rs) = self.render_state.as_mut() {
+                if let Some(rs) = self.logic.render_state.as_mut() {
                     rs.resize(size.width, size.height);
                 }
             }
             WindowEvent::RedrawRequested => {
-                if let Some(rs) = self.render_state.as_mut() {
+                if let Some(rs) = self.logic.render_state.as_mut() {
                     match rs.render() {
                         Ok(_) => {}
                         Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
@@ -195,9 +96,9 @@ impl ApplicationHandler for App {
                     self.selected_element = None;
                     let window_ref = self.window_ref.clone().unwrap();
                     if self.logic.handle_resizing( self.cursor_position, [current_window_size.width as f32, current_window_size.height as f32]) != Edge::None {
-                        self.resizing = true;
+                        self.logic.app_data.state = AppState::Resizing;
                     }
-                    match self.handle_click(self.cursor_position) {
+                    match self.logic.handle_click(self.cursor_position) {
                         InteractionResult::Success => (),
                         InteractionResult::Propogate(ui_event) => {
                             match ui_event {
@@ -213,15 +114,15 @@ impl ApplicationHandler for App {
                         InteractionResult::None => (),
                     }
                 } else if button == MouseButton::Left && !state.is_pressed() {
-                    if self.resizing {
-                        self.resizing = false;
+                    if self.logic.app_data.state == AppState::Resizing {
+                        self.logic.app_data.state = AppState::Default;
                     }
                 }
             }
 
             WindowEvent::CursorMoved { position, .. } => {
                 let side = self.logic.handle_resizing( self.cursor_position, [current_window_size.width as f32, current_window_size.height as f32]);
-                if self.resizing {
+                if self.logic.app_data.state == AppState::Resizing {
                     let delta_x = position.x as f32 - self.cursor_position[0];
                     let delta_y = position.y as f32 - self.cursor_position[1];
 
@@ -263,20 +164,20 @@ impl ApplicationHandler for App {
 
                 
                 self.cursor_position = [position.x as f32, position.y as f32];
-                self.hovered = self.handle_hover(self.cursor_position);
-                if let Some(hovered) = self.hovered {
-                    if hovered != self.last_hovered {
-                        if self.highlight(0.0) {
+                self.logic.app_data.curr_hover = self.logic.handle_hover(self.cursor_position);
+                if let Some(curr_hover) = self.logic.app_data.curr_hover {
+                    if curr_hover != self.logic.app_data.prev_hover {
+                        if self.logic.highlight(0.0) {
                             needs_update = true
                         }
-                        self.last_hovered = hovered;
+                        self.logic.app_data.prev_hover = curr_hover;
                     } else {
-                        if self.highlight(1.0) {
+                        if self.logic.highlight(1.0) {
                             needs_update = true
                         }
                     }
                 } else {
-                    if self.highlight(0.0) {
+                    if self.logic.highlight(0.0) {
                         needs_update = true
                     }
                 }
@@ -288,7 +189,7 @@ impl ApplicationHandler for App {
                         Key::Named(named_key) => match named_key {
                             NamedKey::Space => {
                                 if let Some((selected_id, element_type)) = &self.selected_element {
-                                    let mut interface_guard = self.interface.lock().unwrap();
+                                    let mut interface_guard = self.logic.interface.lock().unwrap();
                                     for element in &mut interface_guard.elements {
                                         if element.get_id() == *selected_id && *element_type == ElementType::TextBox{
                                             element.set_text(" ", [self.window_size.width, self.window_size.height]);
@@ -299,7 +200,7 @@ impl ApplicationHandler for App {
                             }
                             NamedKey::Enter => {
                                 if let Some((selected_id, element_type)) = &self.selected_element {
-                                    let mut interface_guard = self.interface.lock().unwrap();
+                                    let mut interface_guard = self.logic.interface.lock().unwrap();
                                     for element in &mut interface_guard.elements {
                                         if element.get_id() == *selected_id && *element_type == ElementType::TextBox{
                                             element.set_text("\n", [self.window_size.width, self.window_size.height]);
@@ -312,7 +213,7 @@ impl ApplicationHandler for App {
                         }
                         Key::Character(char) => {
                             if let Some((selected_id, element_type)) = &self.selected_element {
-                                let mut interface_guard = self.interface.lock().unwrap();
+                                let mut interface_guard = self.logic.interface.lock().unwrap();
                                 for element in &mut interface_guard.elements {
                                     if element.get_id() == *selected_id && *element_type == ElementType::TextBox{
                                         element.set_text(&char, [self.window_size.width, self.window_size.height]);
@@ -334,62 +235,21 @@ impl ApplicationHandler for App {
         }
 
         if needs_update {
-            if let Some(rs) = &self.render_state {
-                let mut interface_guard = self.interface.lock().unwrap();
+            if let Some(rs) = &self.logic.render_state {
+                let mut interface_guard = self.logic.interface.lock().unwrap();
                 interface_guard.initialize_interface_buffers(&rs.device, &rs.queue, [self.window_size.width, self.window_size.height]);
             }
         }
 
         if needs_text_update || self.selected_element.is_some() && self.selected_element.as_ref().unwrap().1 == ElementType::TextBox {
-            if let Some(rs) = &self.render_state {
-                let mut interface_guard = self.interface.lock().unwrap();
+            if let Some(rs) = &self.logic.render_state {
+                let mut interface_guard = self.logic.interface.lock().unwrap();
                 interface_guard.update_text(&rs.device, &rs.queue, [self.window_size.width, self.window_size.height]);
             }
         }
 
         if needs_rebuild {
-            self.rebuild_interface();
+            self.logic.rebuild_interface();
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::utils::definitions::AppWindow;
-
-    use super::*;
-
-    #[derive(Debug, Clone)]
-    struct MockWindow {
-        pub cursor_icon: Arc<Mutex<CursorIcon>>,
-    }
-
-    impl MockWindow {
-        fn new() -> Self {
-            Self { 
-                cursor_icon: Arc::new(Mutex::new(CursorIcon::Default)) 
-            }
-        }
-    }
-
-    impl AppWindow for MockWindow {
-        fn set_cursor(&self, cursor: CursorIcon) {
-            *self.cursor_icon.lock().unwrap() = cursor;
-        }
-    }
-
-    #[test]
-    fn it_works() {
-        let mock_window = Some(Arc::new(MockWindow::new()));
-
-        let window_size = PhysicalSize::new(1000, 1000);
-        let cursor_position = PhysicalPosition::new(window_size.width, window_size.height / 2);
-
-        let logic = AppLogic::<MockWindow>::new(mock_window);
-
-        let result = logic.handle_resizing([cursor_position.x as f32, cursor_position.y as f32], [window_size.width as f32, window_size.height as f32]);
-
-        println!("{result:?}");
-        assert_eq!(result, Edge::Right)
     }
 }

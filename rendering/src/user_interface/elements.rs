@@ -3,6 +3,7 @@ use std::time::{Duration, SystemTime};
 use glam::f32;
 
 use crate::definitions::GeometryType;
+
 pub trait Element {
     /// Returns an elements id
     fn get_id(&self) -> u32;
