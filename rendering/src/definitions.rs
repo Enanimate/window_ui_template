@@ -57,7 +57,7 @@ impl Instance {
 }
 
 #[repr(C)]
-#[derive(bytemuck::Pod, bytemuck::Zeroable, Clone, Copy)]
+#[derive(bytemuck::Pod, bytemuck::Zeroable, Clone, Copy, Debug)]
 pub struct InstanceRaw {
     pub id: u32,
     position: [f32; 2],
@@ -102,7 +102,7 @@ impl InstanceRaw {
     }
 }
 
-#[derive(Eq, Hash, PartialEq, Clone, Copy)]
+#[derive(Eq, Hash, PartialEq, Clone, Copy, Debug)]
 pub enum GeometryType {
     Quad,
     Label

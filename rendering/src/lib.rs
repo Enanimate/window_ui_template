@@ -10,6 +10,7 @@ mod pipeline;
 pub mod definitions;
 pub mod user_interface;
 
+#[derive(Debug)]
 pub struct RenderState {
     interface_arc: Arc<Mutex<Interface>>,
 

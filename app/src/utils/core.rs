@@ -1,17 +1,27 @@
-use std::sync::{Arc, Mutex};
-use rendering::{definitions::UiAtlas, user_interface::{elements::{InteractionResult, UiEvent}, interface::Interface}, RenderState};
-use winit::{dpi::PhysicalPosition, event::{MouseButton, WindowEvent}, window::CursorIcon};
+use std::{fmt::Display, sync::{Arc, Mutex}};
+use rendering::{definitions::UiAtlas, user_interface::{elements::{ElementType, InteractionResult, UiEvent}, interface::Interface}, RenderState};
+use winit::{dpi::{PhysicalPosition, PhysicalSize}, event::{ElementState, MouseButton, WindowEvent}, keyboard::{Key, NamedKey}, platform::modifier_supplement::KeyEventExtModifierSupplement, window::CursorIcon};
 
 use crate::utils::{components::header_componenet, definitions::{AppWindow, Edge}};
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Debug)]
 pub enum AppState {
     Default,
     Resizing,
 }
 
+impl Display for AppState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+           AppState::Default => write!(f, "Default"),
+           AppState::Resizing => write!(f, "Resizing")
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct AppData {
-    pub last_logged_cursor_position: PhysicalPosition<f32>,
+    last_logged_cursor_position: PhysicalPosition<f64>,
     pub curr_hover: Option<u32>,
     pub prev_hover: u32,
 
@@ -26,12 +36,15 @@ impl AppData {
             last_logged_cursor_position: PhysicalPosition::new(0.0, 0.0),
             curr_hover: None,
             prev_hover: 0,
+
             state: AppState::Default,
+
             selected: false,
         }
     }
 }
 
+#[derive(Debug)]
 pub struct AppLogic<W: AppWindow> {
     pub render_state: Option<RenderState>,
 
@@ -42,7 +55,7 @@ pub struct AppLogic<W: AppWindow> {
     pub app_data: AppData,
 }
 
-impl<W: AppWindow> AppLogic<W> {
+impl<W: AppWindow + std::fmt::Debug> AppLogic<W> {
     pub fn new(window: Option<Arc<W>>, interface: Arc<Mutex<Interface>>, atlas: UiAtlas) -> Self {
         Self {
             render_state: None,
@@ -56,7 +69,7 @@ impl<W: AppWindow> AppLogic<W> {
     }
 
 
-
+    #[tracing::instrument]
     pub fn rebuild_interface(&mut self) {
         let window_size = self.window.as_ref().unwrap().get_inner_size();
         let new_interface_data = Self::build_project_view(self.atlas.clone());
@@ -82,19 +95,18 @@ impl<W: AppWindow> AppLogic<W> {
 
         interface.show(|ui| {
             header_componenet(ui);
-            ui.add_textbox("placeholder", [0.5, 0.5], [0.5, 0.5], "#ffffffff");
+            //ui.add_textbox("placeholder", [0.5, 0.5], [0.5, 0.5], "#ffffffff");
         });
 
         return interface;
     }
 
 
-
     pub fn handle_resizing(&self, cursor_position: [f32; 2], window_size: [f32; 2]) -> Edge {
         // Needs unit tests | is being tested
         let mut resize_event_area = 2.0;
         if self.app_data.state == AppState::Resizing {
-            resize_event_area = 50.0;
+            resize_event_area = 100.0;
         }
 
         let is_on_left_edge = cursor_position[0] <= resize_event_area;
@@ -172,7 +184,7 @@ impl<W: AppWindow> AppLogic<W> {
 
 
 
-    pub fn default_state_event_handler(&self, event_loop: &winit::event_loop::ActiveEventLoop, event: winit::event::WindowEvent) {
+    pub fn default_state_event_handler(&mut self, event_loop: &winit::event_loop::ActiveEventLoop, event: winit::event::WindowEvent) {
         let current_window_size = self.window.as_ref().unwrap().get_inner_size();
 
         let mut needs_rebuild = false;
@@ -203,42 +215,42 @@ impl<W: AppWindow> AppLogic<W> {
 
             WindowEvent::MouseInput { state, button, .. } => {
                 if button == MouseButton::Left && state.is_pressed() {
-                    self.selected_element = None;
+                    self.app_data.selected = false;
                     let window_ref = self.window.clone().unwrap();
-                    if self.handle_resizing( self.cursor_position, [current_window_size.width as f32, current_window_size.height as f32]) != Edge::None {
+                    if self.handle_resizing( [self.app_data.last_logged_cursor_position.x as f32, self.app_data.last_logged_cursor_position.y as f32], [current_window_size.width as f32, current_window_size.height as f32]) != Edge::None {
                         self.app_data.state = AppState::Resizing;
                     }
-                    match self.handle_click(self.cursor_position) {
+                    match self.handle_click([self.app_data.last_logged_cursor_position.x as f32, self.app_data.last_logged_cursor_position.y as f32]) {
                         InteractionResult::Success => (),
                         InteractionResult::Propogate(ui_event) => {
                             match ui_event {
                                 UiEvent::CloseRequested => event_loop.exit(),
-                                UiEvent::SetMinimized => window_ref.set_minimized(true),
-                                UiEvent::ResizeRequested => window_ref.set_maximized(!window_ref.is_maximized()),
-                                UiEvent::TitleBar => {let _ = window_ref.drag_window();}
-                                UiEvent::SetSelected(id, element_type) => {
-                                    self.selected_element = Some((id, element_type))
+                                UiEvent::SetMinimized => window_ref.set_window_minimized(true),
+                                UiEvent::ResizeRequested => window_ref.set_window_maximized(!window_ref.is_window_maximized()),
+                                UiEvent::TitleBar => {let _ = window_ref.drag_place_window();}
+                                UiEvent::SetSelected(_id, _element_type) => {
+                                    self.app_data.selected = true;
                                 }
                             }
                         },
                         InteractionResult::None => (),
                     }
                 } else if button == MouseButton::Left && !state.is_pressed() {
-                    if self.logic.app_data.state == AppState::Resizing {
-                        self.logic.app_data.state = AppState::Default;
+                    if self.app_data.state == AppState::Resizing {
+                        self.app_data.state = AppState::Default;
                     }
                 }
             }
 
             WindowEvent::CursorMoved { position, .. } => {
-                let side = self.logic.handle_resizing( self.cursor_position, [current_window_size.width as f32, current_window_size.height as f32]);
-                if self.logic.app_data.state == AppState::Resizing {
-                    let delta_x = position.x as f32 - self.cursor_position[0];
-                    let delta_y = position.y as f32 - self.cursor_position[1];
+                let side = self.handle_resizing( [self.app_data.last_logged_cursor_position.x as f32, self.app_data.last_logged_cursor_position.y as f32], [current_window_size.width as f32, current_window_size.height as f32]);
+                if self.app_data.state == AppState::Resizing {
+                    let delta_x = position.x as f32 - self.app_data.last_logged_cursor_position.x as f32;
+                    let delta_y = position.y as f32 - self.app_data.last_logged_cursor_position.y as f32;
 
-                    let window = self.window_ref.clone().unwrap();
+                    let window = self.window.clone().unwrap();
 
-                    let current_position = window.outer_position().unwrap_or_default();
+                    let current_position = window.outer_window_position().unwrap_or_default();
 
                     let (mut new_width, mut new_height) = (current_window_size.width as f32, current_window_size.height as f32);
                     let mut new_position_x = current_position.x;
@@ -267,27 +279,27 @@ impl<W: AppWindow> AppLogic<W> {
                         },
                     }
 
-                    window.set_outer_position(PhysicalPosition::new(new_position_x, current_position.y));
-                    let _ = window.request_inner_size(PhysicalSize::new(new_width as u32, new_height as u32));
-                    window.request_redraw();
+                    window.set_outer_window_position(PhysicalPosition::new(new_position_x, current_position.y));
+                    let _ = window.request_inner_window_size(PhysicalSize::new(new_width as u32, new_height as u32));
+                    window.request_window_redraw();
                 }
 
                 
-                self.cursor_position = [position.x as f32, position.y as f32];
-                self.logic.app_data.curr_hover = self.logic.handle_hover(self.cursor_position);
-                if let Some(curr_hover) = self.logic.app_data.curr_hover {
-                    if curr_hover != self.logic.app_data.prev_hover {
-                        if self.logic.highlight(0.0) {
+                self.app_data.last_logged_cursor_position = position;
+                self.app_data.curr_hover = self.handle_hover([self.app_data.last_logged_cursor_position.x as f32, self.app_data.last_logged_cursor_position.y as f32]);
+                if let Some(curr_hover) = self.app_data.curr_hover {
+                    if curr_hover != self.app_data.prev_hover {
+                        if self.highlight(0.0) {
                             needs_update = true
                         }
-                        self.logic.app_data.prev_hover = curr_hover;
+                        self.app_data.prev_hover = curr_hover;
                     } else {
-                        if self.logic.highlight(1.0) {
+                        if self.highlight(1.0) {
                             needs_update = true
                         }
                     }
                 } else {
-                    if self.logic.highlight(0.0) {
+                    if self.highlight(0.0) {
                         needs_update = true
                     }
                 }
@@ -298,22 +310,22 @@ impl<W: AppWindow> AppLogic<W> {
                     match event.key_without_modifiers() {
                         Key::Named(named_key) => match named_key {
                             NamedKey::Space => {
-                                if let Some((selected_id, element_type)) = &self.selected_element {
-                                    let mut interface_guard = self.logic.interface.lock().unwrap();
+                                if self.app_data.selected {
+                                    let mut interface_guard = self.interface.lock().unwrap();
                                     for element in &mut interface_guard.elements {
-                                        if element.get_id() == *selected_id && *element_type == ElementType::TextBox{
-                                            element.set_text(" ", [self.window_size.width, self.window_size.height]);
+                                        if element.get_id() == self.app_data.prev_hover && element.get_element_type() == ElementType::TextBox {
+                                            element.set_text(" ", [self.window.as_ref().unwrap().get_inner_size().width, self.window.as_ref().unwrap().get_inner_size().height]);
                                             needs_text_update = true;
                                         }
                                     }
                                 }
                             }
                             NamedKey::Enter => {
-                                if let Some((selected_id, element_type)) = &self.selected_element {
-                                    let mut interface_guard = self.logic.interface.lock().unwrap();
+                                if self.app_data.selected {
+                                    let mut interface_guard = self.interface.lock().unwrap();
                                     for element in &mut interface_guard.elements {
-                                        if element.get_id() == *selected_id && *element_type == ElementType::TextBox{
-                                            element.set_text("\n", [self.window_size.width, self.window_size.height]);
+                                        if element.get_id() == self.app_data.prev_hover && element.get_element_type() == ElementType::TextBox {
+                                            element.set_text("\n", [self.window.as_ref().unwrap().get_inner_size().width, self.window.as_ref().unwrap().get_inner_size().height]);
                                             needs_text_update = true;
                                         }
                                     }
@@ -322,11 +334,11 @@ impl<W: AppWindow> AppLogic<W> {
                             _ => ()
                         }
                         Key::Character(char) => {
-                            if let Some((selected_id, element_type)) = &self.selected_element {
-                                let mut interface_guard = self.logic.interface.lock().unwrap();
+                            if self.app_data.selected {
+                                let mut interface_guard = self.interface.lock().unwrap();
                                 for element in &mut interface_guard.elements {
-                                    if element.get_id() == *selected_id && *element_type == ElementType::TextBox{
-                                        element.set_text(&char, [self.window_size.width, self.window_size.height]);
+                                    if element.get_id() == self.app_data.prev_hover && element.get_element_type() == ElementType::TextBox {
+                                        element.set_text(&char, [self.window.as_ref().unwrap().get_inner_size().width, self.window.as_ref().unwrap().get_inner_size().height]);
                                         needs_text_update = true;
                                     }
                                 }
@@ -340,30 +352,106 @@ impl<W: AppWindow> AppLogic<W> {
             _ => ()
         }
 
-        if let Some(window_arc) = self.window_ref.as_ref() {
-            window_arc.request_redraw();
+        if let Some(window_arc) = self.window.as_ref() {
+            window_arc.request_window_redraw();
         }
 
         if needs_update {
-            if let Some(rs) = &self.logic.render_state {
-                let mut interface_guard = self.logic.interface.lock().unwrap();
-                interface_guard.initialize_interface_buffers(&rs.device, &rs.queue, [self.window_size.width, self.window_size.height]);
+            if let Some(rs) = &self.render_state {
+                let mut interface_guard = self.interface.lock().unwrap();
+                interface_guard.initialize_interface_buffers(&rs.device, &rs.queue, [self.window.as_ref().unwrap().get_inner_size().width, self.window.as_ref().unwrap().get_inner_size().height]);
             }
         }
 
-        if needs_text_update || self.selected_element.is_some() && self.selected_element.as_ref().unwrap().1 == ElementType::TextBox {
-            if let Some(rs) = &self.logic.render_state {
-                let mut interface_guard = self.logic.interface.lock().unwrap();
-                interface_guard.update_text(&rs.device, &rs.queue, [self.window_size.width, self.window_size.height]);
+        if needs_text_update || self.app_data.selected {
+            let interface_guard = self.interface.lock().unwrap();
+            let mut is_textbox = false;
+            for element in &interface_guard.elements {
+                if element.get_id() == self.app_data.prev_hover && element.get_element_type() == ElementType::TextBox {
+                    is_textbox = true;
+                    break;
+                }
+            };
+
+            if is_textbox {
+                if let Some(rs) = &self.render_state {
+                    let mut interface_guard = self.interface.lock().unwrap();
+                    interface_guard.update_text(&rs.device, &rs.queue, [self.window.as_ref().unwrap().get_inner_size().width, self.window.as_ref().unwrap().get_inner_size().height]);
+                }   
             }
         }
 
         if needs_rebuild {
-            self.logic.rebuild_interface();
+            self.rebuild_interface();
         }
     }
 
-    pub fn resizing_state_event_handler() {
+    pub fn resizing_state_event_handler(&mut self, _event_loop: &winit::event_loop::ActiveEventLoop, event: winit::event::WindowEvent) {
+        let current_window_size = self.window.as_ref().unwrap().get_inner_size();
 
+        match event {
+            WindowEvent::Resized(size) => {
+                if let Some(rs) = self.render_state.as_mut() {
+                    rs.resize(size.width, size.height);
+                }
+
+                self.window.as_ref().unwrap().request_window_redraw();
+            }
+
+            WindowEvent::RedrawRequested => {
+                self.rebuild_interface();
+
+                if let Some(rs) = self.render_state.as_mut() {
+                    match rs.render() {
+                        Ok(_) => {}
+                        Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
+                            rs.resize(current_window_size.width, current_window_size.height);
+                        }
+                        Err(e) => {
+                            log::error!("Unable to render {}", e);
+                        }
+                    }
+                }
+            }
+
+            WindowEvent::MouseInput { state, button, .. } => {
+                match button {
+                    MouseButton::Left => {
+                        if state.is_pressed() {
+
+                        } else {
+                            self.app_data.state = AppState::Default;
+                            println!("State swapping to {}", self.app_data.state);
+                        }
+                    }
+                    _ => ()
+                }
+            }
+
+            WindowEvent::CursorMoved { position, .. } => {
+                let delta_x = position.x as f32 - self.app_data.last_logged_cursor_position.x as f32;
+                let delta_y = position.y as f32 - self.app_data.last_logged_cursor_position.y as f32;
+                
+
+                match self.handle_resizing([position.x as f32, position.y as f32], [current_window_size.width as f32, current_window_size.height as f32]) {
+                    Edge::None => {
+                        self.app_data.state = AppState::Default;
+                        println!("State swapping to {}", self.app_data.state);
+                    }
+
+                    Edge::Right => {
+                        println!("delta_x: {}", delta_x);
+                        println!("delta_y: {}", delta_y);
+                        self.window.as_ref().unwrap().request_inner_window_size(PhysicalSize::new(current_window_size.width + delta_x as u32, current_window_size.height));
+                    }
+                    _ => ()
+                }
+
+                //self.window.as_ref().unwrap().request_inner_window_size(PhysicalSize::new(current_window_size.width + delta_x as u32, current_window_size.height));
+                self.app_data.last_logged_cursor_position = position;
+                self.window.as_ref().unwrap().request_window_redraw();
+            }
+            _ => ()
+        }
     }
 }

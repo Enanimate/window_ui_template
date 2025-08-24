@@ -7,6 +7,7 @@ pub(crate) struct Camera2DUniform {
     pub(crate) view_proj: [[f32; 4]; 4],
 }
 
+#[derive(Debug)]
 pub(crate) struct Camera2D {
     position: Vec2,
     screen_size: PhysicalSize<u32>,

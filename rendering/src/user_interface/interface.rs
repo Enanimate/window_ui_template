@@ -1,13 +1,13 @@
 use core::option::Option::Some;
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::Debug};
 
 use wgpu::{Device, Queue};
 use wgpu_text::{glyph_brush::{ab_glyph::FontRef, Section, Text}, BrushBuilder, TextBrush};
 
-use crate::{definitions::{GeometryType, Instance, InstanceRaw, UiAtlas, Vertex}, user_interface::{elements::Element, UserInterface}};
+use crate::{definitions::{GeometryType, Instance, InstanceRaw, UiAtlas, Vertex}, user_interface::{elements::{Element, ElementDebug}, UserInterface}};
 
 pub struct Interface {
-    pub elements: Vec<Box<dyn Element>>,
+    pub elements: Vec<Box<dyn ElementDebug>>,
     instances: HashMap<GeometryType, Vec<InstanceRaw>>,
     id_iterator: u32,
     illegal_ids: Vec<u32>,
@@ -16,6 +16,14 @@ pub struct Interface {
     instance_buffers: HashMap<GeometryType, wgpu::Buffer>,
     brush: Option<TextBrush<FontRef<'static>>>,
     atlas: UiAtlas,
+}
+
+impl Debug for Interface {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Interface")
+            .field("brush", &"TextBrush(...)")
+            .finish()
+    }
 }
 
 impl Interface {
@@ -38,7 +46,7 @@ impl Interface {
         elements_builder(&mut user_interface)
     }
 
-    pub fn add_elements(&mut self, mut element: impl Element + 'static, id: Option<u32>) {
+    pub fn add_elements(&mut self, mut element: impl Element + 'static + std::fmt::Debug, id: Option<u32>) {
         if let Some(id_number) = id {
             element.set_id(id_number);
             self.illegal_ids.push(id_number);
@@ -102,13 +110,14 @@ impl Interface {
         }
     }
 
+    #[tracing::instrument]
     pub fn initalize_text_brush(&mut self, device: &Device, config: &wgpu::SurfaceConfiguration, queue: &Queue) {
         let font_bytes = include_bytes!("../../../ComicMono.ttf");
         self.brush = Some(BrushBuilder::using_font_bytes(font_bytes)
             .unwrap()
             .build(device, config.width, config.height, config.format));
 
-        let mut section = Vec::new();
+        let mut section: Vec<Section<'_>> = Vec::new();
         
         section.push(Section::default()
             .add_text(Text::new("abcdefghijklmnopqrstuvwyxz")));
@@ -116,6 +125,7 @@ impl Interface {
         self.brush.as_mut().unwrap().queue(device, queue, section).expect("uh oh");
     }
 
+    #[tracing::instrument]
     pub fn initialize_interface_buffers(&mut self, device: &Device, queue: &Queue, window_size: [u32; 2]) {
         let mut batched_instances: HashMap<GeometryType, Vec<InstanceRaw>> = HashMap::new();
         let atlas = &self.atlas;
@@ -172,6 +182,7 @@ impl Interface {
         self.update_text(device, queue, window_size);
     }
 
+    #[tracing::instrument]
     pub fn update_vertices(&mut self, queue: &Queue, window_size: [u32; 2]) {
         self.brush.as_ref().unwrap().resize_view(window_size[0] as f32, window_size[1] as f32, queue);
 
@@ -189,6 +200,7 @@ impl Interface {
         }
     }
 
+    #[tracing::instrument]
     pub fn update_text(&mut self, device: &Device, queue: &Queue, window_size: [u32; 2]) {
         let mut label_data: Vec<(String, [f32; 4], Option<[f32; 2]>, [f32; 2])> = Vec::new();
         for element in self.elements.iter_mut() {

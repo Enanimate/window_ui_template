@@ -1,3 +1,5 @@
+use std::fmt;
+
 use crate::{definitions::{Color, ColorExt}, user_interface::{elements::{Button, Element, Icon, Label, Panel, TextBox, UiEvent}, interface::Interface}};
 
 pub mod interface;
@@ -9,7 +11,7 @@ pub struct UserInterface<'a> {
 
 impl<'a> UserInterface<'a> {
     /// Used for adding a manually constructed element to the [Interface].
-    pub fn add_element(&mut self, element: impl Element + 'static, id: Option<u32>) {
+    pub fn add_element(&mut self, element: impl Element + 'static + fmt::Debug, id: Option<u32>) {
         self.interface.add_elements(element, id);
     }
 

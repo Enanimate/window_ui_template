@@ -10,3 +10,5 @@ glam = "0.30.5"
 bytemuck = "1.23.1"
 image = "0.25.6"
 wgpu_text = "26.0.0"
+
+tracing = "0.1"

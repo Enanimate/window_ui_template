@@ -6,11 +6,33 @@ use winit::{dpi::{PhysicalPosition, PhysicalSize}, window::CursorIcon};
 
 use crate::utils::{core::AppLogic, definitions::{AppWindow, Edge}};
 
+#[derive(Debug, Clone)]
+struct MockWindowData {
+    inner_size: PhysicalSize<u32>,
+    outer_position: PhysicalPosition<i32>,
+
+    minimized: bool,
+    maximized: bool,
+}
+
+impl MockWindowData {
+    fn default() -> Self {
+        Self { 
+            inner_size: PhysicalSize::new(800, 800),
+            outer_position: PhysicalPosition::new(0, 0),
+
+            minimized: false, 
+            maximized: false 
+        }
+    }
+}
+
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
 struct MockWindow {
     pub cursor_icon: Arc<Mutex<CursorIcon>>,
-    pub inner_size: PhysicalSize<u32>,
+
+    window_data: Arc<Mutex<MockWindowData>>,
 }
 
 impl AppWindow for MockWindow {
@@ -19,7 +41,41 @@ impl AppWindow for MockWindow {
     }
 
     fn get_inner_size(&self) -> PhysicalSize<u32> {
-        self.inner_size
+        self.window_data.lock().unwrap().inner_size
+    }
+
+    fn set_window_minimized(&self, minimized: bool) {
+        self.window_data.lock().unwrap().minimized = minimized;
+    }
+
+    fn set_window_maximized(&self, maximized: bool) {
+        self.window_data.lock().unwrap().maximized = maximized;
+    }
+
+    fn is_window_maximized(&self) -> bool {
+        self.window_data.lock().unwrap().maximized
+    }
+
+    fn drag_place_window(&self) -> Result<(), winit::error::ExternalError> {
+        Ok(())
+    }
+
+    fn outer_window_position(&self) -> Result<PhysicalPosition<i32>, winit::error::NotSupportedError> {
+        Ok(self.window_data.lock().unwrap().outer_position)
+    }
+
+    fn set_outer_window_position(&self, position: PhysicalPosition<i32>) {
+        self.window_data.lock().unwrap().outer_position = position
+    }
+
+    fn request_inner_window_size(&self, size: PhysicalSize<u32>) -> Option<PhysicalSize<u32>> {
+        let mut guard = self.window_data.lock().unwrap();
+        guard.inner_size = size;
+        Some(guard.inner_size)
+    }
+
+    fn request_window_redraw(&self) {
+        ()
     }
 }
 
@@ -28,7 +84,8 @@ fn resizing_check() {
     // Initialize mock data
     let mock_window = MockWindow {
         cursor_icon: Arc::new(Mutex::new(CursorIcon::Default)),
-        inner_size: PhysicalSize::new(800, 800)
+
+        window_data: Arc::new(Mutex::new(MockWindowData::default())),
     };
 
     let atlas = UiAtlas::new(0, 0);
@@ -37,7 +94,8 @@ fn resizing_check() {
     
     let logic = AppLogic::<MockWindow>::new(mock_window_ref, mock_interface, atlas);
 
-    let window_size = [mock_window.inner_size.width as f32, mock_window.inner_size.height as f32];
+    let guard = mock_window.window_data.lock().unwrap();
+    let window_size = [guard.inner_size.width as f32, guard.inner_size.height as f32];
 
     check_resize_edge(&logic, window_size, Edge::Left);
     check_resize_edge(&logic, window_size, Edge::BottomLeft);

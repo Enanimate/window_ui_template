@@ -1,8 +1,12 @@
-use std::time::{Duration, SystemTime};
+use std::{fmt::Debug, time::{Duration, SystemTime}};
 
 use glam::f32;
 
 use crate::definitions::GeometryType;
+
+pub trait ElementDebug: Element + Debug {}
+
+impl<T> ElementDebug for T where T: Element + Debug{}
 
 pub trait Element {
     /// Returns an elements id
@@ -83,6 +87,7 @@ pub trait Element {
     fn is_cursor_within_bounds(&self, cursor_position: [f32; 2], element_pos: [f32; 2], element_scale: [f32;2]) -> bool;
 }
 
+#[derive(Debug)]
 pub struct Panel {
     id: u32,
     pub geometry_type: GeometryType,
@@ -246,6 +251,15 @@ impl Button {
     }
 }
 
+impl Debug for Button {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Button")
+            .field("on_click", &"Option<Box<dyn Fn()>>")
+            .field("on_click_propogate", &"Option<Box<dyn Fn() -> UiEvent>>")
+            .finish()
+    }
+}
+
 impl Element for Button {
     fn get_bounds(&self, _window_size: [u32; 2]) -> Option<[f32; 2]> {
         None
@@ -334,6 +348,7 @@ impl Element for Button {
     }
 }
 
+#[derive(Debug)]
 pub struct Label {
     id: u32,
     pub geometry_type: GeometryType,
@@ -431,6 +446,7 @@ impl Element for Label {
     }
 }
 
+#[derive(Debug)]
 pub struct Icon {
     id: u32,
     pub geometry_type: GeometryType,
@@ -525,6 +541,7 @@ impl Element for Icon {
     }
 }
 
+#[derive(Debug)]
 pub struct TextBox {
     id: u32,
     pub geometry_type: GeometryType,
