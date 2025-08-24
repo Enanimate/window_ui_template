@@ -16,10 +16,6 @@ impl<W: AppWindow> AppLogic<W> {
         }
     }
 
-    pub fn set_window(&mut self) {
-        
-    }
-
     pub fn handle_resizing(&self, cursor_position: [f32; 2], window_size: [f32; 2]) -> Edge {
         let mut resize_event_area = 2.0;
         if self.resizing {

@@ -4,16 +4,19 @@ use rendering::{definitions::UiAtlas, user_interface::{elements::{ElementType, I
 #[allow(unused_imports)]
 use winit::{application::ApplicationHandler, dpi::{PhysicalPosition, PhysicalSize}, event::{ElementState, MouseButton, WindowEvent}, event_loop::{ControlFlow, EventLoop}, keyboard::{Key, NamedKey}, platform::modifier_supplement::KeyEventExtModifierSupplement, window::{CursorIcon, Window}};
 
-use crate::utils::{atlas_generation::generate_texture_atlas, components::header_componenet, core::AppLogic, definitions::{AppWindow, Edge}};
+use crate::utils::{atlas_generation::generate_texture_atlas, components::header_componenet, core::AppLogic, definitions::Edge};
 
 mod utils;
 
 fn main() {
     let atlas = generate_texture_atlas();
-    App::<winit::window::Window>::new(atlas);
+    let mut app = App::new(atlas);
+    env_logger::init();
+    let event_loop = EventLoop::new().unwrap();
+    event_loop.run_app(&mut app).unwrap();
 }
 
-struct App<W: AppWindow> {
+struct App {
     render_state: Option<RenderState>,
     window_ref: Option<Arc<Window>>,
     interface: Arc<Mutex<Interface>>,
@@ -24,12 +27,12 @@ struct App<W: AppWindow> {
     last_hovered: u32,
     atlas: UiAtlas,
     resizing: bool,
-    logic: AppLogic<W>
+    logic: AppLogic<Window>
 }
 
-impl<W: AppWindow> App<W> {
-    fn new(atlas: UiAtlas) {
-        let mut app = Self {
+impl App {
+    fn new(atlas: UiAtlas) -> Self {
+        Self {
             render_state: None,
             window_ref: None,
             interface: Arc::new(Mutex::new(Interface::new(atlas.clone()))),
@@ -41,16 +44,12 @@ impl<W: AppWindow> App<W> {
             atlas,
             resizing: false,
             logic: AppLogic::new(None)
-        };
+        }
 
-        env_logger::init();
+        //env_logger::init();
         
-        let event_loop = EventLoop::new().unwrap();
-        event_loop.run_app(&mut app).unwrap();
-    }
-
-    fn update_logic(&mut self) {
-        self.logic.window = self.window_ref
+        //let event_loop = EventLoop::new().unwrap();
+        //event_loop.run_app(&mut app).unwrap();
     }
 
     fn handle_click(&self, cursor_position: [f32; 2]) -> InteractionResult {
@@ -135,7 +134,7 @@ impl<W: AppWindow> App<W> {
     }
 }
 
-impl<W: AppWindow> ApplicationHandler for App<W> {
+impl ApplicationHandler for App {
     fn resumed(&mut self, event_loop: &winit::event_loop::ActiveEventLoop) {
         event_loop.set_control_flow(ControlFlow::Poll);
         let window_attributes = Window::default_attributes().with_maximized(true).with_decorations(false);
@@ -160,6 +159,12 @@ impl<W: AppWindow> ApplicationHandler for App<W> {
         let mut needs_rebuild = false;
         let mut needs_update = false;
         let mut needs_text_update = false;
+
+        if self.window_ref.is_none() {
+            println!("returned");
+            return;
+        }
+        println!("Not returned");
 
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
@@ -350,42 +355,39 @@ impl<W: AppWindow> ApplicationHandler for App<W> {
 
 #[cfg(test)]
 mod tests {
+    use crate::utils::definitions::AppWindow;
+
     use super::*;
 
-    #[derive(Debug, PartialEq, Clone)]
+    #[derive(Debug, Clone)]
     struct MockWindow {
-        pub cursor_icon: CursorIcon,
+        pub cursor_icon: Arc<Mutex<CursorIcon>>,
+    }
+
+    impl MockWindow {
+        fn new() -> Self {
+            Self { 
+                cursor_icon: Arc::new(Mutex::new(CursorIcon::Default)) 
+            }
+        }
     }
 
     impl AppWindow for MockWindow {
-        fn set_cursor(&self, _cursor: CursorIcon) {
-            ()
+        fn set_cursor(&self, cursor: CursorIcon) {
+            *self.cursor_icon.lock().unwrap() = cursor;
         }
     }
 
     #[test]
     fn it_works() {
-        let mock_window = Arc::new(MockWindow { cursor_icon: CursorIcon::Default });
-        let mock_window_ref = Some(mock_window);
+        let mock_window = Some(Arc::new(MockWindow::new()));
+
         let window_size = PhysicalSize::new(1000, 1000);
         let cursor_position = PhysicalPosition::new(window_size.width, window_size.height / 2);
 
-        let atlas = UiAtlas::new(0, 0);
-        let app = App {
-            render_state: None,
-            window_ref: None,
-            interface: Arc::new(Mutex::new(Interface::new(atlas.clone()))),
-            window_size,
-            cursor_position: [cursor_position.x as f32, cursor_position.y as f32],
-            selected_element: None,
-            hovered: None,
-            last_hovered: 0,
-            atlas: atlas,
-            resizing: false,
-            logic: AppLogic::<MockWindow>::new(mock_window_ref)
-        };
+        let logic = AppLogic::<MockWindow>::new(mock_window);
 
-        let result = AppLogic::handle_resizing(&app.logic, [cursor_position.x as f32, cursor_position.y as f32], [window_size.width as f32, window_size.height as f32]);
+        let result = logic.handle_resizing([cursor_position.x as f32, cursor_position.y as f32], [window_size.width as f32, window_size.height as f32]);
 
         println!("{result:?}");
         assert_eq!(result, Edge::Right)
